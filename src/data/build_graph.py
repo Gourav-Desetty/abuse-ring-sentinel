@@ -1,48 +1,17 @@
 """Push the base transaction graph + planted collusion rings into Neo4j.
 
-Consumes the outputs of ``load_paysim.py`` and ``plant_rings.py`` -- the
-``nx.MultiDiGraph`` built by ``build_base_graph`` and the list of planted
-``Ring`` objects -- and loads them into Neo4j, the graph Phase 2
-(``PLAN.MD`` § Architecture) runs GDS community/cycle detection against.
+Consumes load_paysim.py + plant_rings.py's output (the built graph and the
+list of planted Rings) and writes it via UNWIND-batched, idempotent
+(MERGE-on-account_id / MERGE-on-defining-properties) writes -- see
+ARCHITECTURE.md § Phase 1 for the full node/relationship schema and env var
+setup.
 
-Schema
-------
-Nodes
-    ``(:Account {account_id, kind, device_id?})`` -- one per PaySim
-    nameOrig/nameDest. ``device_id`` is present only on accounts planted
-    into a shared_device ring.
-Relationships
-    ``(:Account)-[:TRANSACTED_WITH {amount, step, type}]->(:Account)`` for
-    every base transaction edge (real PaySim rows + planted ring legs).
-    ``(:Account)-[:SHARES_PAYOUT]->(:Account)`` between the payer accounts
-    of a single planted shared_payout ring. Derived from the ring's planted
-    TRANSACTED_WITH legs (whichever accounts fed that ring's payout node),
-    not inferred from arbitrary shared nameDest: real merchants have
-    thousands of unrelated customers converging on them, and legit_cluster
-    is deliberately planted to look like a shared-payout fan-in without
-    being one -- inferring the relationship from any shared destination
-    would erase that hard-negative signal.
-
-Ground truth
-    Every node/relationship belonging to a planted ring carries ``ring_id``,
-    ``ring_type``, ``difficulty``, ``split`` properties, so train/test
-    ground truth is queryable in Neo4j directly rather than living only in
-    the Python ``Ring`` objects. A node planted into more than one ring
-    keeps the tag from whichever ring is processed last -- collisions are
-    rare (``rng.sample`` draws from thousands of candidates over ~30 rings)
-    and acceptable for a synthetic benchmark.
-
-Connection
-    Reads ``NEO4J_URI`` / ``NEO4J_USERNAME`` / ``NEO4J_PASSWORD`` /
-    ``NEO4J_DATABASE`` from the environment (or a ``.env`` file) -- same
-    variable names as sentrychain-ai_reference's ``Neo4jConfig``, so an
-    existing ``.env`` from that project can be reused as-is.
-
-Writes are batched with UNWIND (never row-by-row ``session.run``), since the
-full PaySim file is 6M+ edges. Nodes are MERGE-d on ``account_id`` (backed by
-a uniqueness constraint created at startup) and relationships are MERGE-d on
-their defining properties, so re-running this script does not create
-duplicates.
+SHARES_PAYOUT is derived from each shared_payout ring's actual planted
+TRANSACTED_WITH legs (who fed that ring's payout node), not from any two
+accounts sharing a real nameDest: a popular merchant has thousands of
+unrelated customers, and legit_cluster is deliberately planted to look like
+that same fan-in shape without being one -- inferring the relationship from
+raw shared destinations would erase that hard-negative signal.
 """
 
 from __future__ import annotations
@@ -108,7 +77,8 @@ def create_constraints(driver: Driver, config: Neo4jConfig) -> None:
 
 def _ring_tag_map(rings: list[Ring]) -> dict[str, dict]:
     """node_id -> {ring_id, ring_type, difficulty, split} for every planted
-    ring member. See module docstring re: last-ring-wins on collision.
+    ring member. A node planted into more than one ring keeps whichever
+    ring's tag is written last -- a rare collision, acceptable here.
     """
     tags: dict[str, dict] = {}
     for ring in rings:

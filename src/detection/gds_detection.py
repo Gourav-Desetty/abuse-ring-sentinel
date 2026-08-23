@@ -1,48 +1,17 @@
 """Extract candidate collusion rings from the Neo4j transaction graph.
 
-Phase 2 of PLAN.MD's architecture: "Neo4j GDS (community detection, cycle
-detection) -> input guardrail (only high-suspicion candidates pass) -> ...".
-This module is the first half -- it surfaces *candidates* with raw graph
-evidence and a suspicion score; a later input guardrail (`agent/guardrails.py`,
-build order step 4) decides which candidates are suspicious enough to reach
-the LLM.
+Surfaces *candidates* with raw graph evidence and a suspicion score for
+each of the three planted ring shapes (shared_device, shared_payout,
+circular_flow), via plain Cypher pattern queries rather than Neo4j's GDS
+library -- see ARCHITECTURE.md § "Why Cypher pattern detection, not GDS"
+for the full reasoning.
 
-Why plain Cypher instead of the `gds.*` procedure library
------------------------------------------------------------
-PLAN.MD names "Neo4j GDS" for this step, and that's what this module would
-normally call (`gds.louvain.stream`, `gds.scc.stream`, ...). But this
-project's Neo4j is AuraDB, which ships **Aura Graph Analytics Serverless**
-rather than classic self-managed GDS: every `gds.*` algorithm call requires
-first provisioning a separate, billed compute session
-(`gds.session.getOrCreate`, ~$0.40/GB-hour, ~2GB recommended for this
-graph). Rather than spend real money per detection run, the three ring
-shapes are detected with equivalent plain-Cypher graph queries instead:
-
-- **shared_device** -> group accounts by the `device_id` node property.
-- **shared_payout** -> group accounts whose TRANSACTED_WITH edges fan into
-  the same destination account (this is what community detection would
-  otherwise be finding: a small, locally dense cluster around one sink).
-- **circular_flow** -> a bounded variable-length path query
-  `(a)-[:TRANSACTED_WITH*3..6]->(a)` (what gds.scc.stream would otherwise
-  give you, minus the parts of a strongly-connected component that aren't
-  part of any actual cycle).
-
-At this graph's size (~150K nodes) plain Cypher runs these in low single
-digit seconds -- GDS would only start winning at a scale this project isn't
-operating at.
-
-IMPORTANT: detection here must not read `ring_id` / `ring_type` /
-`difficulty` / `split` or the `:SHARES_PAYOUT` relationship -- those are
-ground truth stamped by `plant_rings.py` / `build_graph.py` for evaluation
-only. A real detector never sees them; using them here would make detection
-trivial and `eval/metrics.py`'s future precision/recall numbers meaningless.
-Detection works only off `:TRANSACTED_WITH` structure and the `device_id`
-property (standing in for a real device-fingerprint signal, not a ring
-label). `evaluate_against_ground_truth()` below is the one exception: it
-cross-checks detector recall against ring_id for developer sanity-checking,
-the same way `build_graph.py`'s `verify_load()` cross-checks load counts --
-it is not part of the detector and is not the project's formal evaluation
-(that's `eval/metrics.py`, a later build-order step).
+IMPORTANT: detection must never read `ring_id`/`ring_type`/`difficulty`/
+`split` or `:SHARES_PAYOUT` -- those are evaluation-only ground truth
+stamped by plant_rings.py/build_graph.py. Using them here would make
+detection trivial and eval/metrics.py's precision/recall meaningless. Only
+`:TRANSACTED_WITH` structure and `device_id` (a stand-in for a real
+device-fingerprint signal, not a ring label) are fair game.
 """
 
 from __future__ import annotations
@@ -236,9 +205,9 @@ def detect_candidates(
 
 
 def evaluate_against_ground_truth(driver: Driver, config: Neo4jConfig, candidates: list[Candidate]) -> None:
-    """Developer sanity-check only (see module docstring): for each planted
-    ring, report whether any detected candidate of the matching method
-    overlaps its members. Not the project's formal precision/recall
+    """Developer sanity-check only: for each planted ring, report whether
+    any detected candidate of the matching method overlaps its members.
+    Not the project's formal precision/recall
     (that's eval/metrics.py) -- just a quick "did detection even work" spot
     check, the same role build_graph.py's verify_load() plays for loading.
     """
