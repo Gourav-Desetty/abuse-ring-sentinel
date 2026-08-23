@@ -1,0 +1,402 @@
+{
+  "records": [
+    {
+      "candidate_id": "shared_device::DEV-shared_device-obvious-001",
+      "method": "shared_device",
+      "suspicion_score": 0.9,
+      "members": [
+        "C1305361573",
+        "C1424878287",
+        "C266548472"
+      ],
+      "evidence": {
+        "device_id": "DEV-shared_device-obvious-001",
+        "size": 3
+      },
+      "ring_id": "shared_device-obvious-001",
+      "ring_type": "shared_device",
+      "difficulty": "obvious",
+      "split": "test",
+      "ground_truth": "positive",
+      "predicted_verdict": "ring_flagged",
+      "n_runs": 5,
+      "verdicts": [
+        "needs_more_data",
+        "ring_flagged",
+        "ring_flagged",
+        "needs_more_data",
+        "ring_flagged"
+      ],
+      "flip_rate": 0.4,
+      "is_grounded": true,
+      "hallucinated_claims": [],
+      "diagnosis": "**1. Likely collusion ring?**\u202fYes  \n\n**2. Supporting evidence**  \n- The graph shows a single **device_id**\u202f=\u202f`DEV\u2011shared_device\u2011obvious\u2011001` that connects **size**\u202f=\u202f3 members (C1305361573, C1424878287, C266548472).  \n\n**3. Plausible collusion mechanism**\u202f\u2013\u202f*shared device*: all three accounts have logged in or transacted from the same device, indicating coordinated control.  \n\n**4. Overall suspicion severity**\u202f\u2013\u202fMedium (the shared\u2011device link is concrete, but no additional signals such as fund flows or timing patterns are present).",
+      "reason": "diagnosis answered 'yes' to Q1, grounded=True",
+      "n_succeeded": 5,
+      "n_failed": 0,
+      "failure_errors": []
+    },
+    {
+      "candidate_id": "shared_device::DEV-shared_device-subtle-005",
+      "method": "shared_device",
+      "suspicion_score": 1.0,
+      "members": [
+        "C1403617012",
+        "C1631634852",
+        "C2137427912",
+        "C400930588",
+        "C786832424"
+      ],
+      "evidence": {
+        "device_id": "DEV-shared_device-subtle-005",
+        "size": 5
+      },
+      "ring_id": "shared_device-subtle-005",
+      "ring_type": "shared_device",
+      "difficulty": "subtle",
+      "split": "test",
+      "ground_truth": "positive",
+      "predicted_verdict": "needs_more_data",
+      "n_runs": 5,
+      "verdicts": [
+        "needs_more_data",
+        "ring_flagged",
+        "needs_more_data",
+        "ring_flagged",
+        "needs_more_data"
+      ],
+      "flip_rate": 0.4,
+      "is_grounded": true,
+      "hallucinated_claims": [],
+      "diagnosis": "**1. Likely collusion ring?**\u202fUnclear  \n\n**2. Supporting evidence**  \n- The graph shows a single node\u202f`device_id: \"DEV-shared_device-subtle-005\"`\u202fwith a fan\u2011in of\u202f`size: 5`, which matches the five listed members (C1403617012, C1631634852, C2137427912, C400930588, C786832424).  \n\n**3. Plausible collusion mechanism**\u202fShared\u2011device usage (all five accounts have logged in or transacted from the same device).  \n\n**4. Overall suspicion severity**\u202fLow (the only signal is a shared device; no additional corroborating activity such as fund flows, timing patterns, or other risk indicators is present).  ",
+      "reason": "diagnosis answered 'unclear' to Q1, grounded=True",
+      "n_succeeded": 5,
+      "n_failed": 0,
+      "failure_errors": []
+    },
+    {
+      "candidate_id": "shared_payout::C680344850",
+      "method": "shared_payout",
+      "suspicion_score": 0.2885,
+      "members": [
+        "C1041448817",
+        "C1477009521",
+        "C223224253"
+      ],
+      "evidence": {
+        "payout_account": "C680344850",
+        "size": 3,
+        "step_window": 3
+      },
+      "ring_id": null,
+      "ring_type": null,
+      "difficulty": null,
+      "split": null,
+      "ground_truth": "negative",
+      "predicted_verdict": "needs_more_data",
+      "n_runs": 5,
+      "verdicts": [
+        "needs_more_data",
+        "needs_more_data",
+        "needs_more_data",
+        "needs_more_data",
+        "needs_more_data"
+      ],
+      "flip_rate": 0.0,
+      "is_grounded": true,
+      "hallucinated_claims": [],
+      "diagnosis": "**1. Likely collusion ring?**\u202f**Yes**  \n\n**2. Supporting evidence**  \n- The graph shows a **single \u201cpayout_account\u201d = C680344850** that is linked to all three members (C1041448817, C1477009521, C223224253) \u2013 the hallmark of a shared\u2011payout pattern.  \n- **\u201csize\u201d:\u202f3** confirms that exactly three distinct accounts are converging on this payout account.  \n- **\u201cstep_window\u201d:\u202f3** indicates the connections occurred within a short time window, reinforcing coordinated activity.\n\n**3. Plausible collusion mechanism** \u2013 **Shared\u2011payout funnel**: multiple fraud\u2011producer accounts (the three members) are routing their proceeds to a single downstream payout account (C680344850) to consolidate earnings and obscure the source.\n\n**4. Overall suspicion severity** \u2013 **Medium**  \nThree coordinated accounts funneling funds quickly to one payout destination suggest intentional collusion, but the limited size (only three members) keeps the risk at a medium level rather than high or critical.",
+      "reason": "diagnosis said 'yes' and was grounded, but suspicion_score 0.2885 is below the shared_payout flag floor 0.4 -- evidence too thin to act on",
+      "n_succeeded": 5,
+      "n_failed": 0,
+      "failure_errors": []
+    },
+    {
+      "candidate_id": "shared_payout::C-PAYOUT-shared_payout-obvious-009",
+      "method": "shared_payout",
+      "suspicion_score": 0.3333,
+      "members": [
+        "C1038008479",
+        "C1300057048",
+        "C1655691500",
+        "C1872257166"
+      ],
+      "evidence": {
+        "payout_account": "C-PAYOUT-shared_payout-obvious-009",
+        "size": 4,
+        "step_window": 5
+      },
+      "ring_id": "shared_payout-obvious-009",
+      "ring_type": "shared_payout",
+      "difficulty": "obvious",
+      "split": "test",
+      "ground_truth": "positive",
+      "predicted_verdict": "needs_more_data",
+      "n_runs": 5,
+      "verdicts": [
+        "needs_more_data",
+        "needs_more_data",
+        "needs_more_data",
+        "needs_more_data",
+        "needs_more_data"
+      ],
+      "flip_rate": 0.0,
+      "is_grounded": true,
+      "hallucinated_claims": [],
+      "diagnosis": "**1. Likely collusion ring?**\u202f**Yes**  \n\n**2. Supporting evidence**  \n- The graph shows a single **`payout_account` = \"C-PAYOUT-shared_payout-obvious-009\"`** that is linked to all members.  \n- **`size` = 4** indicates four distinct accounts are connected to that payout account.  \n- **`step_window` = 5** shows the connections occurred within a short time window, implying coordinated activity.  \n\n**3. Plausible collusion mechanism** \u2013 **Shared\u2011payout funnel**: multiple accounts (C1038008479, C1300057048, C1655691500, C1872257166) are routing funds to the same payout account, suggesting a funnel that consolidates earnings for a single beneficiary.  \n\n**4. Overall suspicion severity** \u2013 **Medium** (multiple accounts, tight step window, and a common payout destination indicate coordinated behavior, but without additional signals (e.g., device sharing, transaction amounts) the risk is not at the highest tier).",
+      "reason": "diagnosis said 'yes' and was grounded, but suspicion_score 0.3333 is below the shared_payout flag floor 0.4 -- evidence too thin to act on",
+      "n_succeeded": 5,
+      "n_failed": 0,
+      "failure_errors": []
+    },
+    {
+      "candidate_id": "shared_payout::C-PAYOUT-shared_payout-subtle-015",
+      "method": "shared_payout",
+      "suspicion_score": 0.0694,
+      "members": [
+        "C1083495277",
+        "C1841097601",
+        "C814930485"
+      ],
+      "evidence": {
+        "payout_account": "C-PAYOUT-shared_payout-subtle-015",
+        "size": 3,
+        "step_window": 44
+      },
+      "ring_id": "shared_payout-subtle-015",
+      "ring_type": "shared_payout",
+      "difficulty": "subtle",
+      "split": "test",
+      "ground_truth": "positive",
+      "predicted_verdict": "needs_more_data",
+      "n_runs": 5,
+      "verdicts": [
+        "needs_more_data",
+        "needs_more_data",
+        "needs_more_data",
+        "needs_more_data",
+        "needs_more_data"
+      ],
+      "flip_rate": 0.0,
+      "is_grounded": true,
+      "hallucinated_claims": [],
+      "diagnosis": "**1. Likely collusion ring? \u2013 Yes**  \n**2. Supporting evidence**  \n- The graph shows a single **`\"payout_account\": \"C-PAYOUT-shared_payout-subtle-015\"`** receiving funds from all members.  \n- **`\"size\": 3`** indicates three distinct member accounts are linked to that payout account.  \n- The activity occurs within a **`\"step_window\": 44`** (i.e., the transfers happen in a relatively tight time frame).  \n\n**3. Plausible collusion mechanism** \u2013 **Shared\u2011payout funnel**: multiple accounts (C1083495277, C1841097601, C814930485) are routing their earnings to the same payout account, suggesting coordinated fund consolidation.\n\n**4. Overall suspicion severity** \u2013 **Medium** (three accounts converging on a single payout node within a short window points to coordinated behavior, but the evidence is limited to the payout link alone).",
+      "reason": "diagnosis said 'yes' and was grounded, but suspicion_score 0.0694 is below the shared_payout flag floor 0.4 -- evidence too thin to act on",
+      "n_succeeded": 5,
+      "n_failed": 0,
+      "failure_errors": []
+    },
+    {
+      "candidate_id": "circular_flow::C1120408335-C838513034-C950052162-C779752097",
+      "method": "circular_flow",
+      "suspicion_score": 1.0,
+      "members": [
+        "C1120408335",
+        "C838513034",
+        "C950052162",
+        "C779752097"
+      ],
+      "evidence": {
+        "length": 4,
+        "amounts": [
+          81504.4375,
+          81504.4375,
+          81504.4375,
+          81504.4375
+        ],
+        "amount_cv": 0.0
+      },
+      "ring_id": "circular_flow-obvious-020",
+      "ring_type": "circular_flow",
+      "difficulty": "obvious",
+      "split": "test",
+      "ground_truth": "positive",
+      "predicted_verdict": "ring_flagged",
+      "n_runs": 5,
+      "verdicts": [
+        "ring_flagged",
+        "ring_flagged",
+        "ring_flagged",
+        "ring_flagged",
+        "ring_flagged"
+      ],
+      "flip_rate": 0.0,
+      "is_grounded": true,
+      "hallucinated_claims": [],
+      "diagnosis": "**1. Likely collusion ring?**\u202f**Yes**  \n\n**2. Supporting evidence**  \n- `\"length\": 4` \u2013 a closed loop of four accounts.  \n- `\"amounts\": [81504.4375, 81504.4375, 81504.4375, 81504.4375]` \u2013 every transfer in the loop is for the exact same amount.  \n- `\"amount_cv\": 0.0` \u2013 zero coefficient of variation confirms perfect uniformity across the transfers.  \n\n**3. Plausible collusion mechanism** \u2013 **circular flow** (a payout funnel where funds are passed around the four members in a closed cycle).  \n\n**4. Overall suspicion severity** \u2013 **High** (identical amounts and a perfect\u2011CV cycle are strong indicators of coordinated activity).  ",
+      "reason": "diagnosis answered 'yes' to Q1, grounded=True",
+      "n_succeeded": 5,
+      "n_failed": 0,
+      "failure_errors": []
+    },
+    {
+      "candidate_id": "circular_flow::C1303683796-C704279786-C1579909190-C269333852-C1532502819-C1913558175",
+      "method": "circular_flow",
+      "suspicion_score": 0.7988,
+      "members": [
+        "C1303683796",
+        "C704279786",
+        "C1579909190",
+        "C269333852",
+        "C1532502819",
+        "C1913558175"
+      ],
+      "evidence": {
+        "length": 6,
+        "amounts": [
+          14347.58984375,
+          13066.539557094982,
+          12806.787602944602,
+          11823.464321435555,
+          13122.918088788207,
+          6859.861508452377
+        ],
+        "amount_cv": 0.2012
+      },
+      "ring_id": "circular_flow-subtle-022",
+      "ring_type": "circular_flow",
+      "difficulty": "subtle",
+      "split": "test",
+      "ground_truth": "positive",
+      "predicted_verdict": "ring_flagged",
+      "n_runs": 5,
+      "verdicts": [
+        "needs_more_data",
+        "ring_flagged",
+        "ring_flagged",
+        "ring_flagged",
+        "ring_flagged"
+      ],
+      "flip_rate": 0.2,
+      "is_grounded": true,
+      "hallucinated_claims": [],
+      "diagnosis": "**1. Likely collusion ring? \u2013 Yes**  \n**2. Supporting evidence**  \n- `\"length\": 6` \u2013 a closed loop of six distinct members, the hallmark of a circular\u2011flow pattern.  \n- `\"amount_cv\": 0.2012` \u2013 a coefficient of variation of ~20\u202f% across the six transfers, indicating the amounts are relatively uniform rather than random.  \n- `\"amounts\": [14347.58984375,\u202f13066.539557094982,\u202f12806.787602944602,\u202f11823.464321435555,\u202f13122.918088788207,\u202f6859.861508452377]` \u2013 the six transaction values cluster in the 6\u201114\u202fk range, reinforcing the low\u2011variance observation.\n\n**3. Plausible collusion mechanism** \u2013 **circular flow** (money is passed sequentially through the six accounts and returns to the origin, creating a closed\u2011loop funnel). The detection method itself (\u201ccircular_flow\u201d) and the six\u2011node cycle support this interpretation.\n\n**4. Overall suspicion severity \u2013 Medium**  \n- The presence of a six\u2011node cycle with moderately low amount variance is a strong indicator of coordinated activity, but the variation is not extremely tight (CV\u202f\u2248\u202f20\u202f%) and no additional signals (e.g., shared devices, timing windows) are provided. Hence the risk is elevated but not at the highest tier.",
+      "reason": "diagnosis answered 'yes' to Q1, grounded=True",
+      "n_succeeded": 5,
+      "n_failed": 0,
+      "failure_errors": []
+    }
+  ],
+  "metrics": {
+    "tp": 3,
+    "fp": 0,
+    "fn": 3,
+    "tn": 1,
+    "precision": 1.0,
+    "recall": 0.5,
+    "fp_cost": 0
+  },
+  "breakdown": [
+    {
+      "group": "circular_flow/obvious",
+      "kind": "positive",
+      "n": 1,
+      "n_flagged": 1,
+      "rate": 1.0
+    },
+    {
+      "group": "circular_flow/subtle",
+      "kind": "positive",
+      "n": 1,
+      "n_flagged": 1,
+      "rate": 1.0
+    },
+    {
+      "group": "no_ring (coincidental)",
+      "kind": "negative",
+      "n": 1,
+      "n_flagged": 0,
+      "rate": 0.0
+    },
+    {
+      "group": "shared_device/obvious",
+      "kind": "positive",
+      "n": 1,
+      "n_flagged": 1,
+      "rate": 1.0
+    },
+    {
+      "group": "shared_device/subtle",
+      "kind": "positive",
+      "n": 1,
+      "n_flagged": 0,
+      "rate": 0.0
+    },
+    {
+      "group": "shared_payout/obvious",
+      "kind": "positive",
+      "n": 1,
+      "n_flagged": 0,
+      "rate": 0.0
+    },
+    {
+      "group": "shared_payout/subtle",
+      "kind": "positive",
+      "n": 1,
+      "n_flagged": 0,
+      "rate": 0.0
+    }
+  ],
+  "stability": [
+    {
+      "candidate_id": "shared_payout::C-PAYOUT-shared_payout-obvious-009",
+      "ground_truth": "positive",
+      "suspicion_score": 0.3333,
+      "n_runs": 6,
+      "verdicts": [
+        "needs_more_data",
+        "needs_more_data",
+        "needs_more_data",
+        "needs_more_data",
+        "needs_more_data",
+        "needs_more_data"
+      ],
+      "modal_verdict": "needs_more_data",
+      "flip_rate": 0.0,
+      "n_succeeded": 6,
+      "n_failed": 0
+    },
+    {
+      "candidate_id": "shared_payout::C680344850",
+      "ground_truth": "negative",
+      "suspicion_score": 0.2885,
+      "n_runs": 6,
+      "verdicts": [
+        "needs_more_data",
+        "needs_more_data",
+        "needs_more_data",
+        "needs_more_data",
+        "needs_more_data",
+        "needs_more_data"
+      ],
+      "modal_verdict": "needs_more_data",
+      "flip_rate": 0.0,
+      "n_succeeded": 6,
+      "n_failed": 0
+    },
+    {
+      "candidate_id": "shared_payout::C-PAYOUT-shared_payout-subtle-015",
+      "ground_truth": "positive",
+      "suspicion_score": 0.0694,
+      "n_runs": 6,
+      "verdicts": [
+        "needs_more_data",
+        "needs_more_data",
+        "needs_more_data",
+        "needs_more_data",
+        "needs_more_data",
+        "needs_more_data"
+      ],
+      "modal_verdict": "needs_more_data",
+      "flip_rate": 0.0,
+      "n_succeeded": 6,
+      "n_failed": 0
+    }
+  ],
+  "n_candidates_total": 25,
+  "n_excluded_train": 18,
+  "n_eligible": 7,
+  "n_unscored_failed": 0,
+  "n_runs_attempted": 53,
+  "n_runs_failed": 0
+}
