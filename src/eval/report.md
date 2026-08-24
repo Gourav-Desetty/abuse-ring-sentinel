@@ -29,23 +29,23 @@ LLM sampling noise affects true-positive candidates too, not just deliberately b
 
 | candidate_id | ground_truth | score | runs ok | verdicts (one per run) | modal verdict (scored) | flip rate |
 |---|---|---|---|---|---|---|
-| `shared_device::DEV-shared_device-obvious-001` | positive | 0.9 | 5/5 | needs_more_data, ring_flagged, ring_flagged, needs_more_data, ring_flagged | ring_flagged | 40% |
-| `shared_device::DEV-shared_device-subtle-005` | positive | 1.0 | 5/5 | needs_more_data, ring_flagged, needs_more_data, ring_flagged, needs_more_data | needs_more_data | 40% |
+| `shared_device::DEV-shared_device-obvious-001` | positive | 0.9 | 5/5 | ring_flagged, needs_more_data, needs_more_data, ring_flagged, ring_flagged | ring_flagged | 40% |
+| `shared_device::DEV-shared_device-subtle-005` | positive | 1.0 | 5/5 | ring_flagged, needs_more_data, needs_more_data, ring_flagged, ring_flagged | ring_flagged | 40% |
 | `shared_payout::C680344850` | negative | 0.2885 | 5/5 | needs_more_data, needs_more_data, needs_more_data, needs_more_data, needs_more_data | needs_more_data | 0% |
 | `shared_payout::C-PAYOUT-shared_payout-obvious-009` | positive | 0.3333 | 5/5 | needs_more_data, needs_more_data, needs_more_data, needs_more_data, needs_more_data | needs_more_data | 0% |
 | `shared_payout::C-PAYOUT-shared_payout-subtle-015` | positive | 0.0694 | 5/5 | needs_more_data, needs_more_data, needs_more_data, needs_more_data, needs_more_data | needs_more_data | 0% |
 | `circular_flow::C1120408335-C838513034-C950052162-C779752097` | positive | 1.0 | 5/5 | ring_flagged, ring_flagged, ring_flagged, ring_flagged, ring_flagged | ring_flagged | 0% |
-| `circular_flow::C1303683796-C704279786-C1579909190-C269333852-C1532502819-C1913558175` | positive | 0.7988 | 5/5 | needs_more_data, ring_flagged, ring_flagged, ring_flagged, ring_flagged | ring_flagged | 20% |
+| `circular_flow::C1303683796-C704279786-C1579909190-C269333852-C1532502819-C1913558175` | positive | 0.7988 | 5/5 | needs_more_data, needs_more_data, ring_flagged, needs_more_data, ring_flagged | needs_more_data | 40% |
 
 ## Breakdown by ring_type / difficulty
 
 | Group | Kind | N | Flagged | Rate |
 |---|---|---|---|---|
 | circular_flow/obvious | positive | 1 | 1 | 100.00% (recall) |
-| circular_flow/subtle | positive | 1 | 1 | 100.00% (recall) |
+| circular_flow/subtle | positive | 1 | 0 | 0.00% (recall) |
 | no_ring (coincidental) | negative | 1 | 0 | 0.00% (false-positive rate) |
 | shared_device/obvious | positive | 1 | 1 | 100.00% (recall) |
-| shared_device/subtle | positive | 1 | 0 | 0.00% (recall) |
+| shared_device/subtle | positive | 1 | 1 | 100.00% (recall) |
 | shared_payout/obvious | positive | 1 | 0 | 0.00% (recall) |
 | shared_payout/subtle | positive | 1 | 0 | 0.00% (recall) |
 
@@ -74,11 +74,12 @@ A deeper look at the same phenomenon the majority vote above corrects for, but o
 > **1. Likely collusion ring?** Yes  
 > 
 > **2. Supporting evidence**  
-> - The graph shows a single **device_id** = `DEV‑shared_device‑obvious‑001` that connects **size** = 3 members (C1305361573, C1424878287, C266548472).  
+> - `device_id: "DEV-shared_device-obvious-001"` – the same device is linked to all three members.  
+> - `size: 3` – exactly three accounts are connected to that device.  
 > 
-> **3. Plausible collusion mechanism** – *shared device*: all three accounts have logged in or transacted from the same device, indicating coordinated control.  
+> **3. Plausible collusion mechanism** Shared‑device ring (multiple accounts operating from a single device).  
 > 
-> **4. Overall suspicion severity** – Medium (the shared‑device link is concrete, but no additional signals such as fund flows or timing patterns are present).
+> **4. Overall suspicion severity** Medium** (three accounts tied to one device suggests coordinated activity, but without additional signals (e.g., transaction flow) the risk is not yet critical).**
 
 **Output guardrail:** is_grounded=`True`, hallucinated_claims=`[]`
 
@@ -95,19 +96,17 @@ A deeper look at the same phenomenon the majority vote above corrects for, but o
 
 **Diagnosis:**
 
-> **1. Likely collusion ring?** **Yes**  
+> **1. Likely collusion ring?** Unclear – the only signal is a single shared payout account, which could be coincidental without additional corroboration.
 > 
 > **2. Supporting evidence**  
-> - The graph shows a **single “payout_account” = C680344850** that is linked to all three members (C1041448817, C1477009521, C223224253) – the hallmark of a shared‑payout pattern.  
-> - **“size”: 3** confirms that exactly three distinct accounts are converging on this payout account.  
-> - **“step_window”: 3** indicates the connections occurred within a short time window, reinforcing coordinated activity.
+> - The three members are linked to the same payout account **`payout_account: "C680344850"`**.  
+> - The graph reports **`size: 3`** (three members) and a **`step_window: 3`** (the time window in which the shared payouts were observed).
 > 
-> **3. Plausible collusion mechanism** – **Shared‑payout funnel**: multiple fraud‑producer accounts (the three members) are routing their proceeds to a single downstream payout account (C680344850) to consolidate earnings and obscure the source.
+> **3. Plausible collusion mechanism** Shared‑payout funnel – multiple accounts (C1041448817, C1477009521, C223224253) appear to route funds to a common payout account (C680344850).
 > 
-> **4. Overall suspicion severity** – **Medium**  
-> Three coordinated accounts funneling funds quickly to one payout destination suggest intentional collusion, but the limited size (only three members) keeps the risk at a medium level rather than high or critical.
+> **4. Overall suspicion severity** Unclear (insufficient evidence to assign a definitive severity level).
 
 **Output guardrail:** is_grounded=`True`, hallucinated_claims=`[]`
 
 **Final verdict:** `needs_more_data`  
-**Reason:** diagnosis said 'yes' and was grounded, but suspicion_score 0.2885 is below the shared_payout flag floor 0.4 -- evidence too thin to act on
+**Reason:** diagnosis answered 'unclear' to Q1, grounded=True

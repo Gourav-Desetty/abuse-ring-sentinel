@@ -21,16 +21,16 @@
       "predicted_verdict": "ring_flagged",
       "n_runs": 5,
       "verdicts": [
-        "needs_more_data",
-        "ring_flagged",
         "ring_flagged",
         "needs_more_data",
+        "needs_more_data",
+        "ring_flagged",
         "ring_flagged"
       ],
       "flip_rate": 0.4,
       "is_grounded": true,
       "hallucinated_claims": [],
-      "diagnosis": "**1. Likely collusion ring?**\u202fYes  \n\n**2. Supporting evidence**  \n- The graph shows a single **device_id**\u202f=\u202f`DEV\u2011shared_device\u2011obvious\u2011001` that connects **size**\u202f=\u202f3 members (C1305361573, C1424878287, C266548472).  \n\n**3. Plausible collusion mechanism**\u202f\u2013\u202f*shared device*: all three accounts have logged in or transacted from the same device, indicating coordinated control.  \n\n**4. Overall suspicion severity**\u202f\u2013\u202fMedium (the shared\u2011device link is concrete, but no additional signals such as fund flows or timing patterns are present).",
+      "diagnosis": "**1. Likely collusion ring?**\u202fYes  \n\n**2. Supporting evidence**  \n- `device_id: \"DEV-shared_device-obvious-001\"` \u2013 the same device is linked to all three members.  \n- `size: 3` \u2013 exactly three accounts are connected to that device.  \n\n**3. Plausible collusion mechanism**\u202fShared\u2011device ring (multiple accounts operating from a single device).  \n\n**4. Overall suspicion severity**\u202fMedium** (three accounts tied to one device suggests coordinated activity, but without additional signals (e.g., transaction flow) the risk is not yet critical).**",
       "reason": "diagnosis answered 'yes' to Q1, grounded=True",
       "n_succeeded": 5,
       "n_failed": 0,
@@ -56,20 +56,20 @@
       "difficulty": "subtle",
       "split": "test",
       "ground_truth": "positive",
-      "predicted_verdict": "needs_more_data",
+      "predicted_verdict": "ring_flagged",
       "n_runs": 5,
       "verdicts": [
-        "needs_more_data",
         "ring_flagged",
         "needs_more_data",
+        "needs_more_data",
         "ring_flagged",
-        "needs_more_data"
+        "ring_flagged"
       ],
       "flip_rate": 0.4,
       "is_grounded": true,
       "hallucinated_claims": [],
-      "diagnosis": "**1. Likely collusion ring?**\u202fUnclear  \n\n**2. Supporting evidence**  \n- The graph shows a single node\u202f`device_id: \"DEV-shared_device-subtle-005\"`\u202fwith a fan\u2011in of\u202f`size: 5`, which matches the five listed members (C1403617012, C1631634852, C2137427912, C400930588, C786832424).  \n\n**3. Plausible collusion mechanism**\u202fShared\u2011device usage (all five accounts have logged in or transacted from the same device).  \n\n**4. Overall suspicion severity**\u202fLow (the only signal is a shared device; no additional corroborating activity such as fund flows, timing patterns, or other risk indicators is present).  ",
-      "reason": "diagnosis answered 'unclear' to Q1, grounded=True",
+      "diagnosis": "**1. Likely collusion ring?**\u202fYes  \n\n**2. Supporting evidence**  \n- The graph node shows a single device\u202f`\"device_id\": \"DEV-shared_device-subtle-005\"`\u202fconnected to **5** accounts (`\"size\": 5`). This matches the five listed members (C1403617012, C1631634852, C2137427912, C400930588, C786832424).  \n\n**3. Plausible collusion mechanism**\u202fShared\u2011device usage \u2013 all five accounts access the platform from the same device, indicating coordinated control.  \n\n**4. Overall suspicion severity**\u202fMedium (the shared device is a strong indicator, but no additional signals such as transaction flows or timing patterns are present).",
+      "reason": "diagnosis answered 'yes' to Q1, grounded=True",
       "n_succeeded": 5,
       "n_failed": 0,
       "failure_errors": []
@@ -105,8 +105,8 @@
       "flip_rate": 0.0,
       "is_grounded": true,
       "hallucinated_claims": [],
-      "diagnosis": "**1. Likely collusion ring?**\u202f**Yes**  \n\n**2. Supporting evidence**  \n- The graph shows a **single \u201cpayout_account\u201d = C680344850** that is linked to all three members (C1041448817, C1477009521, C223224253) \u2013 the hallmark of a shared\u2011payout pattern.  \n- **\u201csize\u201d:\u202f3** confirms that exactly three distinct accounts are converging on this payout account.  \n- **\u201cstep_window\u201d:\u202f3** indicates the connections occurred within a short time window, reinforcing coordinated activity.\n\n**3. Plausible collusion mechanism** \u2013 **Shared\u2011payout funnel**: multiple fraud\u2011producer accounts (the three members) are routing their proceeds to a single downstream payout account (C680344850) to consolidate earnings and obscure the source.\n\n**4. Overall suspicion severity** \u2013 **Medium**  \nThree coordinated accounts funneling funds quickly to one payout destination suggest intentional collusion, but the limited size (only three members) keeps the risk at a medium level rather than high or critical.",
-      "reason": "diagnosis said 'yes' and was grounded, but suspicion_score 0.2885 is below the shared_payout flag floor 0.4 -- evidence too thin to act on",
+      "diagnosis": "**1. Likely collusion ring?**\u202fUnclear \u2013 the only signal is a single shared payout account, which could be coincidental without additional corroboration.\n\n**2. Supporting evidence**  \n- The three members are linked to the same payout account **`payout_account: \"C680344850\"`**.  \n- The graph reports **`size: 3`** (three members) and a **`step_window: 3`** (the time window in which the shared payouts were observed).\n\n**3. Plausible collusion mechanism**\u202fShared\u2011payout funnel \u2013 multiple accounts (C1041448817, C1477009521, C223224253) appear to route funds to a common payout account (C680344850).\n\n**4. Overall suspicion severity**\u202fUnclear (insufficient evidence to assign a definitive severity level).",
+      "reason": "diagnosis answered 'unclear' to Q1, grounded=True",
       "n_succeeded": 5,
       "n_failed": 0,
       "failure_errors": []
@@ -143,7 +143,7 @@
       "flip_rate": 0.0,
       "is_grounded": true,
       "hallucinated_claims": [],
-      "diagnosis": "**1. Likely collusion ring?**\u202f**Yes**  \n\n**2. Supporting evidence**  \n- The graph shows a single **`payout_account` = \"C-PAYOUT-shared_payout-obvious-009\"`** that is linked to all members.  \n- **`size` = 4** indicates four distinct accounts are connected to that payout account.  \n- **`step_window` = 5** shows the connections occurred within a short time window, implying coordinated activity.  \n\n**3. Plausible collusion mechanism** \u2013 **Shared\u2011payout funnel**: multiple accounts (C1038008479, C1300057048, C1655691500, C1872257166) are routing funds to the same payout account, suggesting a funnel that consolidates earnings for a single beneficiary.  \n\n**4. Overall suspicion severity** \u2013 **Medium** (multiple accounts, tight step window, and a common payout destination indicate coordinated behavior, but without additional signals (e.g., device sharing, transaction amounts) the risk is not at the highest tier).",
+      "diagnosis": "**1. Likely collusion ring?**\u202f**Yes**  \n\n**2. Supporting evidence**  \n- The graph shows a single **`payout_account` = \"C-PAYOUT-shared_payout-obvious-009\"`** receiving funds from multiple members.  \n- **`size` = 4** indicates four distinct members are linked to that payout account.  \n- **`step_window` = 5** means the connections occur within a short (5\u2011step) window, suggesting coordinated timing.\n\n**3. Plausible collusion mechanism**  \n- **Shared payout funnel** \u2013 the four accounts appear to be funneling proceeds to the same payout account, a classic pattern of a collusive ring that consolidates earnings to a central beneficiary.\n\n**4. Overall suspicion severity**  \n- **Medium** \u2013 the presence of multiple members, a common payout destination, and a tight step window raise moderate concern, though additional corroborating signals (e.g., device sharing, transaction amounts) are not provided.",
       "reason": "diagnosis said 'yes' and was grounded, but suspicion_score 0.3333 is below the shared_payout flag floor 0.4 -- evidence too thin to act on",
       "n_succeeded": 5,
       "n_failed": 0,
@@ -180,7 +180,7 @@
       "flip_rate": 0.0,
       "is_grounded": true,
       "hallucinated_claims": [],
-      "diagnosis": "**1. Likely collusion ring? \u2013 Yes**  \n**2. Supporting evidence**  \n- The graph shows a single **`\"payout_account\": \"C-PAYOUT-shared_payout-subtle-015\"`** receiving funds from all members.  \n- **`\"size\": 3`** indicates three distinct member accounts are linked to that payout account.  \n- The activity occurs within a **`\"step_window\": 44`** (i.e., the transfers happen in a relatively tight time frame).  \n\n**3. Plausible collusion mechanism** \u2013 **Shared\u2011payout funnel**: multiple accounts (C1083495277, C1841097601, C814930485) are routing their earnings to the same payout account, suggesting coordinated fund consolidation.\n\n**4. Overall suspicion severity** \u2013 **Medium** (three accounts converging on a single payout node within a short window points to coordinated behavior, but the evidence is limited to the payout link alone).",
+      "diagnosis": "**1. Likely collusion ring?**\u202f**Yes**  \n\n**2. Supporting evidence**  \n- The graph shows a single **`payout_account` = \"C-PAYOUT-shared_payout-subtle-015\"`** that is linked to all three members (size\u202f=\u202f3).  \n- The detection method is **`shared_payout`**, which by definition flags accounts that converge on the same payout destination.  \n- The **`step_window` = 44** indicates the three members performed the funneling actions within a relatively tight sequence, reinforcing coordinated behavior.  \n\n**3. Plausible collusion mechanism** \u2013 **Payout funnel**: three separate accounts (C1083495277, C1841097601, C814930485) channel funds to the same payout account, suggesting they are jointly controlling the final cash\u2011out point.  \n\n**4. Overall suspicion severity** \u2013 **Medium**  \n- The ring is small (3 members) and the evidence is limited to a shared payout, but the tight step window and explicit shared\u2011payout flag raise moderate concern.",
       "reason": "diagnosis said 'yes' and was grounded, but suspicion_score 0.0694 is below the shared_payout flag floor 0.4 -- evidence too thin to act on",
       "n_succeeded": 5,
       "n_failed": 0,
@@ -223,7 +223,7 @@
       "flip_rate": 0.0,
       "is_grounded": true,
       "hallucinated_claims": [],
-      "diagnosis": "**1. Likely collusion ring?**\u202f**Yes**  \n\n**2. Supporting evidence**  \n- `\"length\": 4` \u2013 a closed loop of four accounts.  \n- `\"amounts\": [81504.4375, 81504.4375, 81504.4375, 81504.4375]` \u2013 every transfer in the loop is for the exact same amount.  \n- `\"amount_cv\": 0.0` \u2013 zero coefficient of variation confirms perfect uniformity across the transfers.  \n\n**3. Plausible collusion mechanism** \u2013 **circular flow** (a payout funnel where funds are passed around the four members in a closed cycle).  \n\n**4. Overall suspicion severity** \u2013 **High** (identical amounts and a perfect\u2011CV cycle are strong indicators of coordinated activity).  ",
+      "diagnosis": "**1. Likely collusion ring? \u2013 Yes**  \n\n**2. Supporting evidence**  \n- `\"length\": 4` \u2013 a closed loop of four accounts.  \n- `\"amounts\": [81504.4375, 81504.4375, 81504.4375, 81504.4375]` \u2013 every transfer in the loop is for the exact same amount.  \n- `\"amount_cv\": 0.0` \u2013 zero coefficient of variation confirms the amounts are identical across the cycle.  \n\n**3. Plausible collusion mechanism** \u2013 **circular flow** (a payout funnel where funds are passed around the four accounts in a closed loop, each leg matching the others exactly).  \n\n**4. Overall suspicion severity \u2013 High** \u2013 the perfect uniformity of large\u2011value transfers in a closed 4\u2011node cycle is a classic indicator of coordinated money\u2011laundering behavior.",
       "reason": "diagnosis answered 'yes' to Q1, grounded=True",
       "n_succeeded": 5,
       "n_failed": 0,
@@ -244,12 +244,12 @@
       "evidence": {
         "length": 6,
         "amounts": [
-          14347.58984375,
-          13066.539557094982,
-          12806.787602944602,
           11823.464321435555,
           13122.918088788207,
-          6859.861508452377
+          6859.861508452377,
+          14347.58984375,
+          13066.539557094982,
+          12806.787602944602
         ],
         "amount_cv": 0.2012
       },
@@ -258,20 +258,20 @@
       "difficulty": "subtle",
       "split": "test",
       "ground_truth": "positive",
-      "predicted_verdict": "ring_flagged",
+      "predicted_verdict": "needs_more_data",
       "n_runs": 5,
       "verdicts": [
         "needs_more_data",
+        "needs_more_data",
         "ring_flagged",
-        "ring_flagged",
-        "ring_flagged",
+        "needs_more_data",
         "ring_flagged"
       ],
-      "flip_rate": 0.2,
+      "flip_rate": 0.4,
       "is_grounded": true,
       "hallucinated_claims": [],
-      "diagnosis": "**1. Likely collusion ring? \u2013 Yes**  \n**2. Supporting evidence**  \n- `\"length\": 6` \u2013 a closed loop of six distinct members, the hallmark of a circular\u2011flow pattern.  \n- `\"amount_cv\": 0.2012` \u2013 a coefficient of variation of ~20\u202f% across the six transfers, indicating the amounts are relatively uniform rather than random.  \n- `\"amounts\": [14347.58984375,\u202f13066.539557094982,\u202f12806.787602944602,\u202f11823.464321435555,\u202f13122.918088788207,\u202f6859.861508452377]` \u2013 the six transaction values cluster in the 6\u201114\u202fk range, reinforcing the low\u2011variance observation.\n\n**3. Plausible collusion mechanism** \u2013 **circular flow** (money is passed sequentially through the six accounts and returns to the origin, creating a closed\u2011loop funnel). The detection method itself (\u201ccircular_flow\u201d) and the six\u2011node cycle support this interpretation.\n\n**4. Overall suspicion severity \u2013 Medium**  \n- The presence of a six\u2011node cycle with moderately low amount variance is a strong indicator of coordinated activity, but the variation is not extremely tight (CV\u202f\u2248\u202f20\u202f%) and no additional signals (e.g., shared devices, timing windows) are provided. Hence the risk is elevated but not at the highest tier.",
-      "reason": "diagnosis answered 'yes' to Q1, grounded=True",
+      "diagnosis": "**1. Likelihood of a collusion ring:**\u202f**Unclear**  \n\n**2. Supporting evidence**  \n- The graph shows a closed loop of **6** members (`\"length\": 6`).  \n- The transaction amounts are listed (`\"amounts\": [11823.46\u2026, 13122.92\u2026, 6859.86\u2026, 14347.59\u2026, 13066.54\u2026, 12806.79\u2026]`).  \n- The coefficient of variation of those amounts is **0.2012** (`\"amount_cv\": 0.2012`).  \n\nNo additional signals (e.g., shared devices, tight time windows, fan\u2011in/out patterns) are provided, so the evidence is limited to the existence of a six\u2011node cycle with moderately variable amounts.\n\n**3. Plausible collusion mechanism:**\u202f**Circular flow** \u2013 the detection method itself (`circular_flow`) and the six\u2011node cycle (`\"length\": 6`) point to a possible \u201cmoney\u2011mule\u201d or payout\u2011funnel where funds circulate among the listed accounts.\n\n**4. Overall suspicion severity:**\u202f**Unclear** \u2013 with only the cycle length and a modest amount variation, there isn\u2019t enough corroborating detail to assign a definitive severity level.",
+      "reason": "diagnosis answered 'unclear' to Q1, grounded=True",
       "n_succeeded": 5,
       "n_failed": 0,
       "failure_errors": []
@@ -298,8 +298,8 @@
       "group": "circular_flow/subtle",
       "kind": "positive",
       "n": 1,
-      "n_flagged": 1,
-      "rate": 1.0
+      "n_flagged": 0,
+      "rate": 0.0
     },
     {
       "group": "no_ring (coincidental)",
@@ -319,8 +319,8 @@
       "group": "shared_device/subtle",
       "kind": "positive",
       "n": 1,
-      "n_flagged": 0,
-      "rate": 0.0
+      "n_flagged": 1,
+      "rate": 1.0
     },
     {
       "group": "shared_payout/obvious",
