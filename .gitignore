@@ -10,3 +10,9 @@ wheels/
 .venv
 /sentrychain-ai_reference
 .env
+
+# Internal working docs, excluded from the public repo
+PLAN.md
+
+#dataset
+/archive
