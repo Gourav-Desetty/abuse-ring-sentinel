@@ -3,15 +3,7 @@
 Surfaces *candidates* with raw graph evidence and a suspicion score for
 each of the three planted ring shapes (shared_device, shared_payout,
 circular_flow), via plain Cypher pattern queries rather than Neo4j's GDS
-library -- see ARCHITECTURE.md § "Why Cypher pattern detection, not GDS"
-for the full reasoning.
-
-IMPORTANT: detection must never read `ring_id`/`ring_type`/`difficulty`/
-`split` or `:SHARES_PAYOUT` -- those are evaluation-only ground truth
-stamped by plant_rings.py/build_graph.py. Using them here would make
-detection trivial and eval/metrics.py's precision/recall meaningless. Only
-`:TRANSACTED_WITH` structure and `device_id` (a stand-in for a real
-device-fingerprint signal, not a ring label) are fair game.
+library -- see ARCHITECTURE.md.
 """
 
 from __future__ import annotations
@@ -248,7 +240,7 @@ def summarize(candidates: list[Candidate]) -> None:
         print(f"  {method:<15} n={len(group):<6} top scores={scores[:5]}")
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--min-fanin-size", type=int, default=MIN_FANIN_SIZE)
     parser.add_argument("--max-fanin-size", type=int, default=MAX_FANIN_SIZE)
@@ -256,7 +248,7 @@ def main() -> None:
     parser.add_argument("--min-cycle-len", type=int, default=MIN_CYCLE_LEN)
     parser.add_argument("--max-cycle-len", type=int, default=MAX_CYCLE_LEN)
     parser.add_argument("--check-ground-truth", action="store_true", help="run the developer recall spot-check after detection")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     config = Neo4jConfig.from_env()
     driver = get_driver(config)
