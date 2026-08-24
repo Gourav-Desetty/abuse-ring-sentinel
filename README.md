@@ -55,6 +55,17 @@ entirely, not counted as errors either way). At this sample size every cell
 below is either 0% or 100%; see the full report for the caveat on statistical
 significance and on how `FLAG_SCORE_FLOOR` was chosen.
 
+LLM sampling noise turned out to affect true-positive candidates, not just
+deliberately borderline ones — two identical eval runs against the same
+graph produced different recall. So each candidate's verdict below is a
+**majority vote over 5 independent runs** through the full agent, not a
+single sample; a `flip rate` > 0% means the runs didn't all agree. Runs
+whose LLM call fails outright (e.g. Groq's daily quota) are tracked
+separately and excluded from the vote rather than silently counted as a
+verdict — this run had **0 of 53** agent calls fail, so the numbers below
+are a clean measurement, not degraded by infrastructure noise. Full
+per-candidate vote breakdown: [`src/eval/report.md`](src/eval/report.md).
+
 | Metric | Value |
 |---|---|
 | Precision | 100.00% |
@@ -68,19 +79,20 @@ significance and on how `FLAG_SCORE_FLOOR` was chosen.
 | Group | Kind | N | Flagged | Rate |
 |---|---|---|---|---|
 | circular_flow/obvious | positive | 1 | 1 | 100.00% (recall) |
-| circular_flow/subtle | positive | 1 | 0 | 0.00% (recall) |
+| circular_flow/subtle | positive | 1 | 1 | 100.00% (recall) |
 | shared_device/obvious | positive | 1 | 1 | 100.00% (recall) |
-| shared_device/subtle | positive | 1 | 1 | 100.00% (recall) |
+| shared_device/subtle | positive | 1 | 0 | 0.00% (recall) |
 | shared_payout/obvious | positive | 1 | 0 | 0.00% (recall) |
 | shared_payout/subtle | positive | 1 | 0 | 0.00% (recall) |
 | no_ring (coincidental) | negative | 1 | 0 | 0.00% (false-positive rate) |
 
 Recall reflects 3 deliberate non-flags, not 3 misses of unknown cause — each
-has a specific, inspectable reason: **1** (`shared_payout/obvious`) held back
-by the precision-tuned score floor despite a grounded "yes" diagnosis, and
-**2** (`shared_payout/subtle`, `circular_flow/subtle`) where the diagnosis
-itself judged the evidence "unclear" rather than answering yes. Full
-diagnosis/guardrail trail for each is in
+has a specific, inspectable reason: **2** (`shared_payout/obvious`,
+`shared_payout/subtle`) held back by the precision-tuned score floor despite
+a grounded "yes" diagnosis, and **1** (`shared_device/subtle`) where the
+modal judgment across 5 runs was "unclear" rather than "yes" (2 of the 5
+runs did say yes — `flip_rate 40%`, the noisiest candidate in this run).
+Full diagnosis/guardrail trail for each is in
 [`src/eval/report.md`](src/eval/report.md).
 
 ### Worked example: true positive, correctly flagged
@@ -88,7 +100,9 @@ diagnosis/guardrail trail for each is in
 `shared_device::DEV-shared_device-obvious-001` (suspicion_score `0.9`) — three
 accounts sharing one `device_id`. Diagnosis: "Yes," citing the device_id and
 member count. Output guardrail: `is_grounded=True`, no hallucinated claims.
-**Final verdict: `ring_flagged`.**
+**Final verdict: `ring_flagged`** (modal over 5 runs; `flip_rate 40%` — 2 of
+5 runs landed on `needs_more_data` instead, a reminder that even a correct
+majority verdict here isn't unanimous).
 
 ### Worked example: false positive, correctly declined
 
@@ -97,7 +111,8 @@ member count. Output guardrail: `is_grounded=True`, no hallucinated claims.
 downstream account within a 3-step window. The diagnosis said "Yes" and was
 grounded (nothing was hallucinated — every cited field is real), but the
 evidence was too thin: `suspicion_score 0.2885` is below the shared_payout
-flag floor of `0.4`. **Final verdict: `needs_more_data`**, not a false flag.
+flag floor of `0.4`. **Final verdict: `needs_more_data`** (unanimous across
+5 runs, `flip_rate 0%`), not a false flag.
 
 This is the case worth reading in full in the report — it's real data the
 detector genuinely found, not a strawman, and it's why the pipeline has both
