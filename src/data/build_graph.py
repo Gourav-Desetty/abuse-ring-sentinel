@@ -5,13 +5,6 @@ list of planted Rings) and writes it via UNWIND-batched, idempotent
 (MERGE-on-account_id / MERGE-on-defining-properties) writes -- see
 ARCHITECTURE.md § Phase 1 for the full node/relationship schema and env var
 setup.
-
-SHARES_PAYOUT is derived from each shared_payout ring's actual planted
-TRANSACTED_WITH legs (who fed that ring's payout node), not from any two
-accounts sharing a real nameDest: a popular merchant has thousands of
-unrelated customers, and legit_cluster is deliberately planted to look like
-that same fan-in shape without being one -- inferring the relationship from
-raw shared destinations would erase that hard-negative signal.
 """
 
 from __future__ import annotations
@@ -283,7 +276,7 @@ def verify_load(driver: Driver, config: Neo4jConfig, g: nx.MultiDiGraph, rings: 
     print(f"\nsanity check: {'PASS' if ok else 'MISMATCH -- see counts above'}")
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--nrows", type=int, default=None, help="load only the first N PaySim rows (fast dev iteration)")
     parser.add_argument(
@@ -291,7 +284,7 @@ def main() -> None:
     )
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE, help=f"UNWIND batch size (default {DEFAULT_BATCH_SIZE})")
     parser.add_argument("--wipe", action="store_true", help="delete all nodes/relationships before loading (clean test run)")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     config = Neo4jConfig.from_env()
     driver = get_driver(config)
