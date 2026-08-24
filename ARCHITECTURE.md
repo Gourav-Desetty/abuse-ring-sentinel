@@ -123,3 +123,11 @@ ring_type and difficulty, and runs a verdict-stability side-experiment on
 borderline candidates (same candidate, run repeatedly, to separate genuine
 detector behavior from LLM sampling noise). `src/eval/report.py` renders the
 result into `src/eval/report.md`.
+
+### Running it
+
+`main.py` chains build_graph → gds_detection → metrics → report into one
+command (see README.md's Quickstart) by calling each module's own `main()`
+with the same defaults documented there -- it's a convenience wrapper, not a
+separate code path; each step is equally runnable on its own via
+`uv run python -m src.<...>` for more visibility into an individual stage.

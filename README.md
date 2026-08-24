@@ -15,6 +15,10 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) for how it works.
 - Python 3.12+ and [uv](https://docs.astral.sh/uv/)
 - A Neo4j instance (an [AuraDB Free](https://neo4j.com/product/auradb/) instance is enough — see the note on GDS in `ARCHITECTURE.md`)
 - A [Groq API key](https://console.groq.com/keys)
+- `archive/paysim.csv` — not included in this repo (too large); see
+  [`docs/DATA.md`](docs/DATA.md) for the dataset source, the two Kaggle
+  quirks that make it unsuitable as a ring-ground-truth label on its own,
+  and exactly how synthetic ground truth was built on top of it
 
 ```bash
 uv sync
@@ -22,6 +26,18 @@ cp .env.example .env   # then fill in NEO4J_URI / NEO4J_USERNAME / NEO4J_PASSWOR
 ```
 
 **Run the pipeline end to end**
+
+```bash
+uv run python main.py
+```
+
+Runs build graph → detect → eval → report in one command, with the same
+defaults the results below were generated from. `--help` shows the few
+overridable options (sample fraction, skip the build step to reuse an
+already-loaded graph, etc.).
+
+**Or run each step individually**, for more visibility into what each stage
+produces:
 
 ```bash
 # 1. Build the graph: load PaySim, plant synthetic collusion rings, push into Neo4j.
@@ -43,6 +59,8 @@ python -m src.eval.report
 
 `src/data/load_paysim.py` and `src/data/plant_rings.py` can also be run standalone
 (`uv run python -m src.data.load_paysim`) to inspect the loaded/planted data on their own.
+`main.py` deliberately doesn't run the smoke tests (step 3 above) -- they're a proof
+artifact to read the output of, not part of the scored pipeline.
 
 ## Results
 
