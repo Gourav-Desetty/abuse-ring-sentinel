@@ -1,4 +1,4 @@
-"""Run the full agent pipeline over gds_detection.py's candidates and score
+"""Run the full agent pipeline over detection.py's candidates and score
 it against planted ground truth (precision, recall, false-positive cost, by
 ring_type/difficulty), plus a verdict-stability side-experiment on
 borderline candidates.
@@ -36,7 +36,7 @@ from src.agent.guardrails import Guardrails
 from src.agent.nodes import FLAG_SCORE_FLOOR, RUN_FAILED_VERDICT, GroqConfig, build_llm
 from src.data.build_graph import Neo4jConfig
 from src.data.build_graph import get_driver as get_neo4j_driver
-from src.detection.gds_detection import Candidate, detect_candidates
+from src.detection.detection import Candidate, detect_candidates
 
 RESULTS_PATH = Path(__file__).resolve().parent / "eval_results.json"
 
@@ -204,7 +204,7 @@ def select_borderline(records: list[CandidateRecord], k: int = STABILITY_CANDIDA
     """Pick the k candidates closest to a real decision boundary. Only
     shared_payout has one (FLAG_SCORE_FLOOR) -- shared_device and
     circular_flow only ever score near 1.0 or don't appear as a candidate at
-    all (see gds_detection.py's module docstring), so there's no genuine
+    all (see detection.py's module docstring), so there's no genuine
     gray zone to test stability on outside shared_payout.
     """
     floor = FLAG_SCORE_FLOOR.get("shared_payout", 0.0)

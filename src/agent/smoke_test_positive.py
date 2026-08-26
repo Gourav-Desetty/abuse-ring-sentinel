@@ -1,31 +1,16 @@
 """Smoke test: feed a real planted ring (obvious difficulty, suspicion_score
 near 1.0) through the full detect -> diagnose -> verify -> decide agent and
 confirm it comes back a real flag ("ring_flagged"), not "needs_more_data".
-
-This is the positive-case counterpart to smoke_test.py's false-positive
-proof: that test shows the guardrail correctly declines to flag thin,
-coincidental evidence; this one shows the same pipeline doesn't just
-reflexively decline everything -- it can and does flag strong, genuine
-evidence too.
-
-Picks the highest-suspicion_score circular_flow or shared_device candidate
-gds_detection.py currently returns (both methods only ever emit near-certain
-candidates by construction -- see gds_detection.py's module docstring -- so
-the top-scoring one is representative of "obvious" difficulty).
-
-Run: uv run python -m src.agent.smoke_test_positive
 """
 
 from __future__ import annotations
-
 import dataclasses
 import sys
-
 from src.agent.graph_state import build_graph, run_agent
 from src.agent.guardrails import Guardrails
 from src.agent.nodes import GroqConfig, build_llm
 from src.data.build_graph import Neo4jConfig, get_driver
-from src.detection.gds_detection import detect_circular_flow, detect_shared_device
+from src.detection.detection import detect_circular_flow, detect_shared_device
 
 
 def main() -> None:

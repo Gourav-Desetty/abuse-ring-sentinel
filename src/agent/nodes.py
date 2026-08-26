@@ -166,7 +166,7 @@ _Q1_ANSWER_RE = re.compile(r"1\.\s*.*?\b(Yes|No|Unclear)\b", re.IGNORECASE | re.
 
 # The governing rule is: never flag on weak evidence. Grounding alone
 # doesn't enforce that -- it only catches invented facts, not an honest but
-# overconfident read of genuinely thin evidence. gds_detection.py's own
+# overconfident read of genuinely thin evidence. detection.py's own
 # calibration (see its module docstring) found real, coincidental PaySim
 # shared_payout fan-in scores in the *same* 0.07-0.5 range as planted
 # rings, because nothing separates them but timing/size, both of which a

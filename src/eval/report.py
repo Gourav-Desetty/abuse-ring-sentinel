@@ -99,7 +99,7 @@ def generate_report(result: EvalResult) -> str:
         "scoring entirely, not counted as errors either way.\n"
     )
     parts.append(
-        f"- Candidates from gds_detection.py: **{result.n_candidates_total}**\n"
+        f"- Candidates from detection.py: **{result.n_candidates_total}**\n"
         f"- Excluded (matched a train-split ring): **{result.n_excluded_train}**\n"
         f"- Eligible: **{result.n_eligible}**"
         + (f" (of which **{result.n_unscored_failed}** unscored -- every run failed)" if result.n_unscored_failed else "")

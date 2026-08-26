@@ -2,27 +2,23 @@
 detect -> diagnose -> verify -> decide agent and confirm it comes back
 "needs_more_data", not a false flag.
 
-C680344850 is a genuine (unplanted) PaySim account that gds_detection.py's
+C680344850 is a genuine (unplanted) PaySim account that detection.py's
 detect_shared_payout() surfaces as a shared_payout candidate: 3 real
 accounts happened to TRANSFER into it within a 3-step window, with no
 shared device_id and no other corroborating signal (see the earlier
-worked-example writeup). It passed gds_detection.py's hard structural
+worked-example writeup). It passed detection.py's hard structural
 filters, so this is a genuine test of the *agent's* guardrails, not a
-strawman gds_detection.py would have caught anyway.
-
-Run: uv run python -m src.agent.smoke_test
+strawman detection.py would have caught anyway.
 """
 
 from __future__ import annotations
-
 import dataclasses
 import sys
-
 from src.agent.graph_state import build_graph, run_agent
 from src.agent.guardrails import Guardrails
 from src.agent.nodes import GroqConfig, build_llm
 from src.data.build_graph import Neo4jConfig, get_driver
-from src.detection.gds_detection import detect_shared_payout
+from src.detection.detection import detect_shared_payout
 
 TARGET_PAYOUT_ACCOUNT = "C680344850"
 

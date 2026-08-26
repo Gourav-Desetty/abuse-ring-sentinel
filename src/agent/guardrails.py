@@ -1,7 +1,7 @@
 """Dual guardrail layer: a score floor before the LLM, a grounding check
 after it.
 
-input_guardrail()'s floor is deliberately low (0.05) -- gds_detection.py
+input_guardrail()'s floor is deliberately low (0.05) -- detection.py
 already hard-filters candidates before they arrive here, so this exists to
 catch degenerate scores, not to re-filter its work.
 
@@ -28,13 +28,8 @@ from src.agent.retry import invoke_with_retry
 
 logger = logging.getLogger(__name__)
 
-# A candidate ring as produced by gds_detection.py's Candidate dataclass,
-# flattened to a plain dict (dataclasses.asdict) at the detection/agent
-# boundary -- keys: candidate_id, method, members, evidence, suspicion_score.
 CandidateDict = dict[str, Any]
 
-# Suspicion-score floor for the input guardrail. Deliberately low: it's a
-# sanity floor, not a second hard filter (see module docstring).
 SCORE_FLOOR = 0.05
 
 

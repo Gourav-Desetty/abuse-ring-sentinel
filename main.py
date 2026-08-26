@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 
 from src.data import build_graph
-from src.detection import gds_detection
+from src.detection import detection
 from src.eval import metrics, report
 
 DEFAULT_SAMPLE_FRAC = 0.0157
@@ -34,7 +34,7 @@ def main(argv: list[str] | None = None) -> None:
         build_graph.main(build_graph_argv)
 
     print("\n=== 2/4: detect candidate rings ===")
-    gds_detection.main(["--check-ground-truth"])
+    detection.main(["--check-ground-truth"])
 
     print("\n=== 3/4: score the agent against held-out ground truth ===")
     metrics.main()
