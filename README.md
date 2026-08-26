@@ -46,7 +46,7 @@ produces:
 python -m src.data.build_graph --sample-frac 0.0157 --wipe
 
 # 2. Pull candidate rings out of the graph (Cypher pattern detection, see ARCHITECTURE.md).
-python -m src.detection.gds_detection --check-ground-truth
+python -m src.detection.detection --check-ground-truth
 
 # 3. Prove the guardrail discriminates in both directions.
 python -m src.agent.smoke_test            # real false positive -> needs_more_data
@@ -97,9 +97,9 @@ per-candidate vote breakdown: [`src/eval/report.md`](src/eval/report.md).
 | Group | Kind | N | Flagged | Rate |
 |---|---|---|---|---|
 | circular_flow/obvious | positive | 1 | 1 | 100.00% (recall) |
-| circular_flow/subtle | positive | 1 | 1 | 100.00% (recall) |
+| circular_flow/subtle | positive | 1 | 0 | 0.00% (recall) |
 | shared_device/obvious | positive | 1 | 1 | 100.00% (recall) |
-| shared_device/subtle | positive | 1 | 0 | 0.00% (recall) |
+| shared_device/subtle | positive | 1 | 1 | 100.00% (recall) |
 | shared_payout/obvious | positive | 1 | 0 | 0.00% (recall) |
 | shared_payout/subtle | positive | 1 | 0 | 0.00% (recall) |
 | no_ring (coincidental) | negative | 1 | 0 | 0.00% (false-positive rate) |
@@ -107,10 +107,10 @@ per-candidate vote breakdown: [`src/eval/report.md`](src/eval/report.md).
 Recall reflects 3 deliberate non-flags, not 3 misses of unknown cause — each
 has a specific, inspectable reason: **2** (`shared_payout/obvious`,
 `shared_payout/subtle`) held back by the precision-tuned score floor despite
-a grounded "yes" diagnosis, and **1** (`shared_device/subtle`) where the
+a grounded "yes" diagnosis, and **1** (`circular_flow/subtle`) where the
 modal judgment across 5 runs was "unclear" rather than "yes" (2 of the 5
-runs did say yes — `flip_rate 40%`, the noisiest candidate in this run).
-Full diagnosis/guardrail trail for each is in
+runs did say yes — `flip_rate 40%`, tied for the noisiest candidate in this
+run). Full diagnosis/guardrail trail for each is in
 [`src/eval/report.md`](src/eval/report.md).
 
 ### Worked example: true positive, correctly flagged
@@ -146,7 +146,7 @@ src/
     plant_rings.py     # plant synthetic shared_device / shared_payout / circular_flow rings + legit_cluster hard negatives
     build_graph.py      # push accounts/transactions/ring ground truth into Neo4j
   detection/
-    gds_detection.py    # candidate ring extraction (see ARCHITECTURE.md re: "GDS" in the name)
+    detection.py    # candidate ring extraction (Cypher pattern queries, see ARCHITECTURE.md)
   agent/
     graph_state.py       # LangGraph wiring: detect -> diagnose -> verify -> decide
     nodes.py              # the four node functions + Groq call
