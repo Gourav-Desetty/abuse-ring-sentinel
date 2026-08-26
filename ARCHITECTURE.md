@@ -24,11 +24,6 @@ flowchart TB
     D --> E
 ```
 
-> `architecture.png` at the repo root is the original planning diagram and
-> labels this stage **"GDS Algorithms (community + cycle detection)."** That
-> was the plan; it's not what got built. See below for why, and why it's a
-> legitimate substitution rather than a shortfall.
-
 ## Phase 1 — Graph Construction
 
 | Step | File | What it does |
@@ -56,7 +51,7 @@ shared-device clusters, payout fan-in — are targets we designed ourselves,
 so their exact graph shape is known in advance. When the shape is known, a
 hand-written Cypher pattern query that checks for that specific shape is
 more precise, more interpretable, and easier to justify per match than a
-black-box community-detection score would be. `src/detection/gds_detection.py`
+black-box community-detection score would be. `src/detection/detection.py`
 implements each ring type as a targeted, explainable check instead of a
 generic clustering pass:
 
@@ -66,7 +61,7 @@ generic clustering pass:
   to `TRANSFER`-type edges and a bounded group size / step window. All three
   filters are load-bearing: PaySim's `nameDest` id reuse means raw fan-in
   count alone produced thousands of false candidates during development
-  (see `gds_detection.py`'s module docstring for the full story).
+  (see `detection.py`'s module docstring for the full story).
 - **circular_flow** → a bounded `(a)-[:TRANSACTED_WITH*3..6]->(a)` path
   query — a direct, explainable cycle check in place of a general-purpose
   strongly-connected-components pass.
@@ -83,11 +78,6 @@ AuraDB Free, only offered as a separate billed product (Aura Graph Analytics
 Serverless, ~$0.40/GB-hour per session). Worth knowing, but secondary to the
 main reason: this is the right tool for detecting patterns whose shape is
 already known, not a workaround for one that costs money.
-
-The module keeps its original name (`gds_detection.py`) rather than being
-renamed, since it's still the same pipeline stage and the same interface
-downstream code depends on — the docstring, not the filename, carries the
-explanation.
 
 ### The agent: detect → diagnose → verify → decide
 
@@ -115,7 +105,7 @@ unsupported flag.
 
 ### Evaluation
 
-`src/eval/metrics.py` runs every candidate `gds_detection.py` finds through
+`src/eval/metrics.py` runs every candidate `detection.py` finds through
 the full agent, scores only the held-out **test split** against planted
 ground truth (train-split matches are excluded from scoring, not counted as
 errors), computes precision/recall/false-positive cost broken down by
@@ -126,7 +116,7 @@ result into `src/eval/report.md`.
 
 ### Running it
 
-`main.py` chains build_graph → gds_detection → metrics → report into one
+`main.py` chains build_graph → detection → metrics → report into one
 command (see README.md's Quickstart) by calling each module's own `main()`
 with the same defaults documented there -- it's a convenience wrapper, not a
 separate code path; each step is equally runnable on its own via
