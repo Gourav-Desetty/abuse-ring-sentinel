@@ -41,8 +41,6 @@ produces:
 
 ```bash
 # 1. Build the graph: load PaySim, plant synthetic collusion rings, push into Neo4j.
-#    --sample-frac (not --nrows) so the sample spans PaySim's full 743-step
-#    timeline -- see ARCHITECTURE.md for why that matters.
 python -m src.data.build_graph --sample-frac 0.0157 --wipe
 
 # 2. Pull candidate rings out of the graph (Cypher pattern detection, see ARCHITECTURE.md).
