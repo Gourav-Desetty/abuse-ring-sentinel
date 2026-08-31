@@ -83,30 +83,11 @@ def detect_shared_payout(
 ) -> list[Candidate]:
     """Accounts fanning into the same downstream personal (kind='C') account.
 
-    Raw fan-in count alone is a bad discriminator: PaySim reuses nameDest
-    ids enough that thousands of unrelated 'C' accounts organically
-    accumulate several payers each (see build_graph.py's SHARES_PAYOUT
-    docstring). Filters, all required (not just scored), narrow this to a
-    tractable candidate set:
-      - dest.kind = 'C', not 'M' -- a merchant naturally accumulates
-        thousands of unrelated customers (the legit_cluster hard-negative
-        shape); many accounts converging on one *personal* account is
-        unusual on its own.
-      - r.type = 'TRANSFER' -- account-to-account routing, matching how a
-        payout ring actually moves money, as opposed to CASH_OUT/CASH_IN/
-        PAYMENT.
-      - group size and step window bounded to roughly the range
-        plant_rings.py plants (3-8 members, <=60-step window) -- a ring is
-        a small, time-clustered group, not a personal account's entire
-        transaction history accumulated over the dataset's full span.
-
-    Even with these, a *chronologically truncated* sample (`--nrows N`,
-    which only spans PaySim's first N rows -- e.g. --nrows 100000 covers
-    just steps 1-10 of 743) makes the step-window filter nearly useless:
-    every transaction in the sample is already tightly clustered in time,
-    real or planted. Load with `--sample-frac` instead of `--nrows` so the
-    graph spans PaySim's full step range and "tight window" is actually a
-    meaningful signal.
+    Required filters (not just scored): dest.kind='C' (a 'M' merchant
+    naturally accumulates unrelated customers), r.type='TRANSFER', and
+    group size / step window bounded to plant_rings.py's ring shape
+    (3-8 members, <=60-step window). Needs `--sample-frac` load, not
+    `--nrows` -- see build_graph.py.
     """
     candidates = []
     for row in session.run(_SHARED_PAYOUT_QUERY, min_size=min_size, max_size=max_size, max_window=max_window):
