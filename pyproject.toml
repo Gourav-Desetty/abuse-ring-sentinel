@@ -1,7 +1,7 @@
 [project]
 name = "abuse-ring-sentinel"
 version = "0.1.0"
-description = "Add your description here"
+description = "Collusion ring detection over transaction graphs (Razorpay AI Buildathon 2026, Track 02)"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
