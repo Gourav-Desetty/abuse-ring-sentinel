@@ -28,7 +28,7 @@ cp .env.example .env   # then fill in NEO4J_URI / NEO4J_USERNAME / NEO4J_PASSWOR
 **Run the pipeline end to end**
 
 ```bash
-uv run python main.py
+python main.py
 ```
 
 Runs build graph → detect → eval → report in one command, with the same
