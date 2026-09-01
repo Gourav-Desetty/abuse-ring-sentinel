@@ -2,7 +2,7 @@
 
 Scored on the held-out **test split only** -- the train split exists purely for threshold tuning. Candidates whose matched planted ring is in the train split are excluded from scoring entirely, not counted as errors either way.
 
-- Candidates from gds_detection.py: **25**
+- Candidates from detection.py: **25**
 - Excluded (matched a train-split ring): **18**
 - Eligible: **7**
 - Agent runs: **53** attempted, **0** failed
@@ -29,13 +29,13 @@ LLM sampling noise affects true-positive candidates too, not just deliberately b
 
 | candidate_id | ground_truth | score | runs ok | verdicts (one per run) | modal verdict (scored) | flip rate |
 |---|---|---|---|---|---|---|
-| `shared_device::DEV-shared_device-obvious-001` | positive | 0.9 | 5/5 | ring_flagged, needs_more_data, needs_more_data, ring_flagged, ring_flagged | ring_flagged | 40% |
-| `shared_device::DEV-shared_device-subtle-005` | positive | 1.0 | 5/5 | ring_flagged, needs_more_data, needs_more_data, ring_flagged, ring_flagged | ring_flagged | 40% |
+| `shared_device::DEV-shared_device-obvious-001` | positive | 0.9 | 5/5 | needs_more_data, ring_flagged, ring_flagged, ring_flagged, ring_flagged | ring_flagged | 20% |
+| `shared_device::DEV-shared_device-subtle-005` | positive | 1.0 | 5/5 | needs_more_data, needs_more_data, ring_flagged, ring_flagged, ring_flagged | ring_flagged | 40% |
 | `shared_payout::C680344850` | negative | 0.2885 | 5/5 | needs_more_data, needs_more_data, needs_more_data, needs_more_data, needs_more_data | needs_more_data | 0% |
 | `shared_payout::C-PAYOUT-shared_payout-obvious-009` | positive | 0.3333 | 5/5 | needs_more_data, needs_more_data, needs_more_data, needs_more_data, needs_more_data | needs_more_data | 0% |
 | `shared_payout::C-PAYOUT-shared_payout-subtle-015` | positive | 0.0694 | 5/5 | needs_more_data, needs_more_data, needs_more_data, needs_more_data, needs_more_data | needs_more_data | 0% |
 | `circular_flow::C1120408335-C838513034-C950052162-C779752097` | positive | 1.0 | 5/5 | ring_flagged, ring_flagged, ring_flagged, ring_flagged, ring_flagged | ring_flagged | 0% |
-| `circular_flow::C1303683796-C704279786-C1579909190-C269333852-C1532502819-C1913558175` | positive | 0.7988 | 5/5 | needs_more_data, needs_more_data, ring_flagged, needs_more_data, ring_flagged | needs_more_data | 40% |
+| `circular_flow::C1303683796-C704279786-C1579909190-C269333852-C1532502819-C1913558175` | positive | 0.7988 | 5/5 | ring_flagged, needs_more_data, needs_more_data, needs_more_data, needs_more_data | needs_more_data | 20% |
 
 ## Breakdown by ring_type / difficulty
 
@@ -71,15 +71,15 @@ A deeper look at the same phenomenon the majority vote above corrects for, but o
 
 **Diagnosis:**
 
-> **1. Likely collusion ring?** Yes  
+> **1. Likely collusion ring?** **Yes**  
 > 
 > **2. Supporting evidence**  
 > - `device_id: "DEV-shared_device-obvious-001"` – the same device is linked to all three members.  
-> - `size: 3` – exactly three accounts are connected to that device.  
+> - `size: 3` – the device is associated with exactly three accounts (C1305361573, C1424878287, C266548472).  
 > 
-> **3. Plausible collusion mechanism** Shared‑device ring (multiple accounts operating from a single device).  
+> **3. Plausible collusion mechanism** **Shared‑device** – the three accounts are accessing the service from a single identifiable device, indicating coordinated use.  
 > 
-> **4. Overall suspicion severity** Medium** (three accounts tied to one device suggests coordinated activity, but without additional signals (e.g., transaction flow) the risk is not yet critical).**
+> **4. Overall suspicion severity** **High** – a dedicated device shared by multiple accounts is a strong indicator of organized activity, and the detection method explicitly flags this as a shared‑device ring.
 
 **Output guardrail:** is_grounded=`True`, hallucinated_claims=`[]`
 
@@ -96,17 +96,18 @@ A deeper look at the same phenomenon the majority vote above corrects for, but o
 
 **Diagnosis:**
 
-> **1. Likely collusion ring?** Unclear – the only signal is a single shared payout account, which could be coincidental without additional corroboration.
+> **1. Likely collusion ring?** **Yes**  
 > 
 > **2. Supporting evidence**  
-> - The three members are linked to the same payout account **`payout_account: "C680344850"`**.  
-> - The graph reports **`size: 3`** (three members) and a **`step_window: 3`** (the time window in which the shared payouts were observed).
+> - The graph shows a single **`payout_account` = "C680344850"`** that is linked to all three members.  
+> - **`size` = 3** confirms that exactly three accounts (C1041448817, C1477009521, C223224253) share this payout destination.  
+> - **`step_window` = 3** indicates the shared activity occurs within a tight three‑step time window, reinforcing coordinated behavior.  
 > 
-> **3. Plausible collusion mechanism** Shared‑payout funnel – multiple accounts (C1041448817, C1477009521, C223224253) appear to route funds to a common payout account (C680344850).
+> **3. Plausible collusion mechanism** – **Shared‑payout funnel**: the three accounts appear to be funneling funds to the same payout account (C680344850), a classic “multiple‑accounts‑to‑one‑payout” scheme.  
 > 
-> **4. Overall suspicion severity** Unclear (insufficient evidence to assign a definitive severity level).
+> **4. Overall suspicion severity** – **Medium** (multiple accounts, common payout, and a short step window suggest coordinated fraud, but the evidence is limited to the shared payout link).
 
 **Output guardrail:** is_grounded=`True`, hallucinated_claims=`[]`
 
 **Final verdict:** `needs_more_data`  
-**Reason:** diagnosis answered 'unclear' to Q1, grounded=True
+**Reason:** diagnosis said 'yes' and was grounded, but suspicion_score 0.2885 is below the shared_payout flag floor 0.4 -- evidence too thin to act on
