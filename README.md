@@ -3,9 +3,6 @@
 Detects collusion rings between accounts/merchants/devices that look
 individually legitimate but form a fraud ring when viewed as a graph.
 
-**Razorpay AI Buildathon 2026 — Track 02: AI Risk Manager.** Defense-only.
-Honest metrics, including false-positive cost, below.
-
 See [`ARCHITECTURE.md`](ARCHITECTURE.md) for how it works.
 
 ## Quickstart
