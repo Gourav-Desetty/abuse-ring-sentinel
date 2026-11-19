@@ -1,19 +1,4 @@
-"""Dual guardrail layer: a score floor before the LLM, a grounding check
-after it.
-
-input_guardrail()'s floor is deliberately low (0.05) -- detection.py
-already hard-filters candidates before they arrive here, so this exists to
-catch degenerate scores, not to re-filter its work.
-
-output_guardrail() fact-checks a diagnosis against the candidate's own
-graph evidence via a second, structured-output LLM call, scoped to invented
-facts only (numbers/ids/amounts absent from the evidence) -- not the
-diagnosis's own interpretive judgment, since an earlier version that
-flagged phrases like "severity: Medium" as unsupported claims cost real
-recall. A failed LLM call still fails safe to `is_grounded=False`, but sets
-`llm_failed=True` so that's never mistaken downstream for a genuine
-"not grounded" verdict.
-"""
+"""Filter low-scoring candidates and verify concrete claims against graph evidence."""
 
 from __future__ import annotations
 
@@ -30,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 CandidateDict = dict[str, Any]
 
+# Catch degenerate scores after detection's graph filters.
 SCORE_FLOOR = 0.05
 
 
@@ -48,10 +34,7 @@ class InputGuardrailArtifact:
 class OutputGuardrailArtifact:
     is_grounded: bool
     hallucinated_claims: list[str] = field(default_factory=list)
-    # True when the guardrail never actually got an answer out of the LLM
-    # (exhausted retries / unparseable response). `is_grounded=False` is
-    # still set as the fail-safe, but this flag is what tells downstream
-    # code the False is an infrastructure artifact, not a judgment.
+    # True when the verifier failed to return a judgment.
     llm_failed: bool = False
     failure_error: str | None = None
 
@@ -87,11 +70,7 @@ _VALIDATION_PROMPT = """
 class Guardrails:
     def __init__(self, llm) -> None:
         self.llm = llm
-        # Binds the LLM to a schema so it returns structured data directly
-        # instead of freeform text we have to parse. The default method
-        # ("function_calling"/tool-calling) 400s against openai/gpt-oss-120b
-        # on Groq ("Tool choice is required, but model did not call a
-        # tool") -- "json_schema" is what actually works for this pairing.
+        # Groq's tool-calling path failed for this model. See docs/EVALUATION.md.
         self.structured_llm = llm.with_structured_output(ValidationResult, method="json_schema")
 
     def input_guardrail(self, candidates: list[CandidateDict], score_floor: float = SCORE_FLOOR) -> InputGuardrailArtifact:
@@ -107,14 +86,7 @@ class Guardrails:
         try:
             validation_data: ValidationResult = invoke_with_retry(lambda: self.structured_llm.invoke(validation_input))
         except Exception as parse_err:
-            # Fail-safe, not fail-hard: if the LLM's structured output call
-            # itself errors, don't crash the pipeline. Mark as ungrounded --
-            # the guardrail is a safety check, so a failure should deny by
-            # default, not silently pass -- but ALSO set llm_failed, because
-            # this False means "no answer" and must never be mistaken (in
-            # the saved eval data) for the LLM having judged the diagnosis
-            # ungrounded. Every exception here is a failure to obtain a
-            # judgment, so all of them set the flag, not just LLMCallFailed.
+            # Fail closed and preserve the missing judgment for evaluation.
             logger.error(f"output guardrail LLM call failed: {parse_err}")
             return OutputGuardrailArtifact(
                 is_grounded=False,

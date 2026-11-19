@@ -1,13 +1,13 @@
 # Abuse Ring Sentinel -- Evaluation Report
 
-Scored on the held-out **test split only** -- the train split exists purely for threshold tuning. Candidates whose matched planted ring is in the train split are excluded from scoring entirely, not counted as errors either way.
+Scoring includes test-split ring matches and candidates without ring tags. Candidates matching a train-split ring are excluded.
 
 - Candidates from detection.py: **25**
 - Excluded (matched a train-split ring): **18**
 - Eligible: **7**
 - Agent runs: **53** attempted, **0** failed
 
-> **Caveat:** `FLAG_SCORE_FLOOR` (the shared_payout evidence-sufficiency threshold in `agent/nodes.py`) was chosen during development by looking directly at this project's own C680344850 false positive and a few obvious/subtle score examples. That candidate's *outcome* is still legitimate to report -- it's real, unplanted data, never itself used for tuning -- but the threshold that routes it was not tuned blind. Treat the numbers below as representative of the design's behavior on a small synthetic set, not as a rigorously held-out benchmark.
+> **Evaluation caveat.** The unplanted PaySim candidate `C680344850` helped inform the shared-payout `FLAG_SCORE_FLOOR` and is included in the scored set. Treat the metrics as descriptive results from a small sample. [Evaluation notes](../../docs/EVALUATION.md)
 
 ## Overall metrics
 

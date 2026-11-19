@@ -1,10 +1,4 @@
-"""Extract candidate collusion rings from the Neo4j transaction graph.
-
-Surfaces *candidates* with raw graph evidence and a suspicion score for
-each of the three planted ring shapes (shared_device, shared_payout,
-circular_flow), via plain Cypher pattern queries rather than Neo4j's GDS
-library -- see ARCHITECTURE.md.
-"""
+"""Find shared devices, payout fan-in, and transaction cycles in Neo4j using Cypher."""
 
 from __future__ import annotations
 
@@ -43,10 +37,7 @@ RETURN device_id, accounts
 
 
 def detect_shared_device(session: Session) -> list[Candidate]:
-    """Accounts sharing a device_id -- a strong, near-unambiguous signal on
-    its own (unrelated accounts colliding on a synthetic device id is
-    vanishingly unlikely), so every group gets a high suspicion score.
-    """
+    """Score shared device IDs highly because the benchmark assigns them synthetically."""
     candidates = []
     for row in session.run(_SHARED_DEVICE_QUERY):
         accounts = sorted(row["accounts"])
@@ -81,21 +72,17 @@ def detect_shared_payout(
     max_size: int = MAX_FANIN_SIZE,
     max_window: int = MAX_FANIN_STEP_WINDOW,
 ) -> list[Candidate]:
-    """Accounts fanning into the same downstream personal (kind='C') account.
+    """Find tightly grouped transfers into a personal account.
 
-    Required filters (not just scored): dest.kind='C' (a 'M' merchant
-    naturally accumulates unrelated customers), r.type='TRANSFER', and
-    group size / step window bounded to plant_rings.py's ring shape
-    (3-8 members, <=60-step window). Needs `--sample-frac` load, not
-    `--nrows` -- see build_graph.py.
+    Merchants naturally receive payments from unrelated customers. Use a
+    `--sample-frac` graph load to preserve the full PaySim timeline.
     """
     candidates = []
     for row in session.run(_SHARED_PAYOUT_QUERY, min_size=min_size, max_size=max_size, max_window=max_window):
         payers = row["payers"]
         accounts = sorted(p["account_id"] for p in payers)
         step_window = row["step_window"]
-        # size reward (relative to the max plausible ring size), decayed by
-        # how spread out the window is
+        # Tight timing and larger groups make payout fan-in more suspicious.
         score = min(1.0, len(accounts) / max_size) * (1.0 / (1.0 + step_window / 10))
         candidates.append(
             Candidate(
@@ -117,23 +104,14 @@ RETURN [n IN ns | n.account_id] AS cycle_nodes, [r IN rels | r.amount] AS amount
 
 
 def _canonical_cycle(members: list[str]) -> tuple[str, ...]:
-    """Rotate a cycle's member list to start at its lexicographically
-    smallest account_id, so e.g. [A,B,C] and [B,C,A] (the same cycle found
-    from two different starting nodes) collapse to one candidate.
-    """
+    """Give different starting points on the same directed cycle a common key."""
     start = min(range(len(members)), key=lambda i: members[i])
     return tuple(members[start:] + members[:start])
 
 
 def detect_circular_flow(session: Session, min_len: int = MIN_CYCLE_LEN, max_len: int = MAX_CYCLE_LEN) -> list[Candidate]:
-    """A -> B -> ... -> A transaction cycles, bounded to `min_len..max_len`
-    hops (matches the size range plant_rings.py plants). Suspicion score
-    rewards low variance in leg amounts -- constant-amount cycles are the
-    layering signature; real coincidental cycles won't have that.
-    """
-    # Cypher can't parameterize a variable-length relationship's hop bounds,
-    # so they're inlined into the query text -- safe here since min_len/
-    # max_len are argparse `type=int` values, never interpolated strings.
+    """Find closed transaction paths and score similar leg amounts as a layering signal."""
+    # Cypher requires literal hop bounds. The CLI parses these as integers.
     query = cast(LiteralString, _CIRCULAR_FLOW_QUERY.replace("*3..6", f"*{min_len}..{max_len}"))
     seen: dict[tuple[str, ...], Candidate] = {}
     for row in session.run(query):
@@ -164,11 +142,7 @@ def detect_candidates(
     min_cycle_len: int = MIN_CYCLE_LEN,
     max_cycle_len: int = MAX_CYCLE_LEN,
 ) -> list[Candidate]:
-    """Run all three detectors and return every raw candidate found, each
-    tagged with a suspicion_score. Beyond shared_payout's hard filters
-    (see detect_shared_payout), no further thresholding happens here --
-    that's the input guardrail's job, downstream.
-    """
+    """Collect raw candidates for the downstream input guardrail."""
     with driver.session(database=config.database) as session:
         candidates = []
         candidates += detect_shared_device(session)
@@ -178,12 +152,7 @@ def detect_candidates(
 
 
 def evaluate_against_ground_truth(driver: Driver, config: Neo4jConfig, candidates: list[Candidate]) -> None:
-    """Developer sanity-check only: for each planted ring, report whether
-    any detected candidate of the matching method overlaps its members.
-    Not the project's formal precision/recall
-    (that's eval/metrics.py) -- just a quick "did detection even work" spot
-    check, the same role build_graph.py's verify_load() plays for loading.
-    """
+    """Spot-check member overlap between planted rings and same-method candidates."""
     with driver.session(database=config.database) as session:
         rings = list(
             session.run(

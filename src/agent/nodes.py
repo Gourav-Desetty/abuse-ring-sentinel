@@ -1,14 +1,4 @@
-"""The four node functions: detect -> diagnose -> verify -> decide.
-
-diagnose_node and verify_node split verdict generation from fact-checking
-into two separate model calls -- a freeform `.invoke()` produces a diagnosis
-citing evidence, then a separate structured-output call (`Guardrails.output_guardrail`)
-checks it independently, rather than trusting one call's self-reported
-citations.
-
-`RING_ANALYSIS_PROMPT` ends in a numbered Yes/No/Unclear judgment;
-`decide_node` parses that answer directly rather than free-text sentiment.
-"""
+"""Agent nodes for detection, diagnosis, independent verification, and verdicts."""
 
 from __future__ import annotations
 
@@ -25,24 +15,15 @@ from pydantic import SecretStr
 from src.agent.guardrails import CandidateDict, Guardrails
 from src.agent.retry import LLMCallFailed, invoke_with_retry
 
-# Sentinel `final_verdict` for a run that never produced an LLM judgment at
-# all (exhausted retries against Groq). Deliberately NOT one of the three
-# real verdicts: an infrastructure failure must not be scoreable as if the
-# agent had declined to flag.
+# Evaluation excludes runs that fail to produce a judgment.
 RUN_FAILED_VERDICT = "run_failed"
 
-# Node functions take the plain dict shape of graph_state.RingState rather
-# than importing that TypedDict directly: graph_state.py imports these node
-# functions to wire the graph, so importing RingState back here would be
-# circular. It's also required for correctness, not just style -- LangGraph
-# resolves add_conditional_edges' router function's type hints at runtime
-# (get_type_hints), and a string-quoted forward ref to a name never actually
-# imported into this module's namespace fails that resolution.
+# Avoid a circular import with graph_state.py. LangGraph resolves router hints at runtime.
 State = dict[str, Any]
 
 logger = logging.getLogger(__name__)
 
-MODEL_NAME = "openai/gpt-oss-120b"  # replacement for llama-3.3-70b-versatile, deprecated by Groq
+MODEL_NAME = "openai/gpt-oss-120b"
 
 
 @dataclass
@@ -87,12 +68,7 @@ support a real judgment (e.g. a single coincidental fan-in with no corroborating
 
 
 def detect_node(state: State, *, guardrails: Guardrails) -> dict[str, Any]:
-    """Entry node. A batch pipeline should pre-filter with
-    `Guardrails.input_guardrail()` before invoking the graph per-candidate;
-    this node re-applies the same score-floor check defensively, so a graph
-    invoked directly on any one candidate (as in a smoke test) is still safe
-    on its own -- not a second, stricter filter, just the same one again.
-    """
+    """Apply the input score floor even when callers invoke the graph directly."""
     candidate: CandidateDict = state["candidate"]
     result = guardrails.input_guardrail([candidate])
     passed = bool(result.passed)
@@ -118,10 +94,6 @@ def diagnose_node(state: State, *, llm: ChatGroq) -> dict[str, Any]:
     try:
         response = invoke_with_retry(lambda: llm.invoke(prompt))
     except LLMCallFailed as err:
-        # A Groq outage (typically the daily token quota) must not take the
-        # whole batch down with it, and must not be recorded as a verdict.
-        # Short-circuit to END via route_after_diagnose with the run marked
-        # failed; the eval layer drops it from the majority vote.
         logger.error(f"diagnose LLM call failed for {candidate['candidate_id']}: {err}")
         return {
             "diagnosis": None,
@@ -135,10 +107,6 @@ def diagnose_node(state: State, *, llm: ChatGroq) -> dict[str, Any]:
 
 
 def route_after_diagnose(state: State) -> str:
-    """Skip verify/decide entirely when diagnose never produced a diagnosis
-    -- there is nothing to fact-check or decide on, and burning a second
-    LLM call on a provider that just refused one is pointless.
-    """
     return "failed" if state.get("run_failed") else "continue"
 
 
@@ -146,55 +114,26 @@ def verify_node(state: State, *, guardrails: Guardrails) -> dict[str, Any]:
     candidate = state["candidate"]
     diagnosis = state["diagnosis"]
     assert diagnosis is not None  # verify only runs after diagnose on the "continue" path
-    # Ground against everything diagnose_node's prompt actually supplied --
-    # method + members + evidence -- not evidence alone. diagnose_node's
-    # prompt legitimately includes the member account ids as context; if the
-    # grounding check only saw `evidence`, citing those same ids back would
-    # look like a hallucination even though nothing was invented.
+    # Method and member IDs can be cited because the diagnosis prompt includes them.
     grounding_source = {"method": candidate["method"], "members": candidate["members"], **candidate["evidence"]}
     result = guardrails.output_guardrail(diagnosis=diagnosis, evidence=grounding_source)
     update: dict[str, Any] = {"is_grounded": result.is_grounded, "hallucinated_claims": result.hallucinated_claims}
     if result.llm_failed:
-        # is_grounded is False here only as a fail-safe default -- carry the
-        # fact that no judgment was obtained through to decide_node, which
-        # would otherwise read it as a genuine "not grounded".
         update |= {"run_failed": True, "failure_stage": "verify", "failure_error": result.failure_error}
     return update
 
 
 _Q1_ANSWER_RE = re.compile(r"1\.\s*.*?\b(Yes|No|Unclear)\b", re.IGNORECASE | re.DOTALL)
 
-# The governing rule is: never flag on weak evidence. Grounding alone
-# doesn't enforce that -- it only catches invented facts, not an honest but
-# overconfident read of genuinely thin evidence. detection.py's own
-# calibration (see its module docstring) found real, coincidental PaySim
-# shared_payout fan-in scores in the *same* 0.07-0.5 range as planted
-# rings, because nothing separates them but timing/size, both of which a
-# diagnosis can legitimately cite without hallucinating anything. So for
-# shared_payout specifically, a "Yes" + grounded diagnosis still isn't
-# enough to flag below this score: it forces needs_more_data instead, even
-# though nothing was ungrounded. This trades recall on subtle shared_payout
-# rings for precision -- the right side of that trade for a flag with real
-# consequences. shared_device and circular_flow aren't included: their
-# evidence (an actual shared device_id; a closed, amount-consistent cycle)
-# doesn't have this coincidental-collision problem, so grounded+"Yes" is
-# already a meaningful bar for them.
+# Coincidental payouts can look grounded because they share timing and size signals
+# with planted rings. The flag floor favors precision at the cost of recall.
 FLAG_SCORE_FLOOR = {"shared_payout": 0.4}
 
 
 def decide_node(state: State) -> dict[str, Any]:
-    """Combine the output guardrail's grounding check, the shared_payout
-    score floor, and the diagnosis's own Q1 answer into a final verdict.
-    An ungrounded diagnosis, an ambiguous ("Unclear") one, or a "Yes" that
-    doesn't clear its method's flag-score floor all resolve to
-    "needs_more_data" -- never "ring_flagged" on weak evidence. A run whose
-    LLM calls failed outright resolves to RUN_FAILED_VERDICT instead, which
-    is not a verdict at all and is excluded from scoring downstream.
-    """
+    """Resolve a verdict from grounding, the numbered Q1 answer, and the flag floor."""
     candidate = state["candidate"]
-    # Checked before the grounding branch: when the output guardrail's LLM
-    # call failed, is_grounded is False by fail-safe default, not by
-    # judgment, and must not resolve to a normal "needs_more_data".
+    # A failed verifier also sets is_grounded=False, so check run failure first.
     if state.get("run_failed"):
         return {
             "final_verdict": RUN_FAILED_VERDICT,

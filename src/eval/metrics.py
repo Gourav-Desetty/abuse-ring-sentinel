@@ -1,26 +1,11 @@
-"""Run the full agent pipeline over detection.py's candidates and score
-it against planted ground truth (precision, recall, false-positive cost, by
-ring_type/difficulty), plus a verdict-stability side-experiment on
-borderline candidates.
+"""Score agent verdicts for test-split ring matches and untagged candidates.
 
-Every eligible candidate runs through the agent MAIN_EVAL_RUNS times (fresh
-thread_id each time); its scored verdict is the modal one across those
-runs, with per-candidate flip_rate reported alongside precision/recall.
-Needed because two identical eval runs against the same graph produced
-different recall (0.50 vs 0.167) -- LLM sampling noise affects even
-clear-cut true positives, not just deliberately borderline ones.
+Use the modal verdict across successful runs and report disagreement as
+the flip rate. Candidates with zero successful runs are unscored.
+Measure stability near the payout flag threshold in a separate experiment.
 
-Scoring is restricted to split="test" ring matches (never "train") --
-`FLAG_SCORE_FLOOR` (agent/nodes.py) was tuned by eye against this project's
-own C680344850 false positive, so that threshold wasn't tuned blind, and
-the scored set still has to stay held-out. A candidate matching no planted
-ring at all (`ring_id` is None) has no split to gate on and is always
-eligible.
-
-A run whose LLM call fails outright (e.g. Groq's daily quota) is tracked
-via `RUN_FAILED_VERDICT` and dropped from the vote entirely -- missing
-data, not evidence of agreement. A candidate whose every run fails is
-excluded from precision/recall rather than scored as a declined flag.
+The saved run had 100% precision and 50% recall across just seven candidates.
+See docs/EVALUATION.md for methodology and calibration limits.
 """
 
 from __future__ import annotations
@@ -44,10 +29,7 @@ MAIN_EVAL_RUNS = 5
 STABILITY_RUNS = 6
 STABILITY_CANDIDATES = 4
 
-# predicted_verdict for a candidate whose every run failed -- no verdict was
-# ever produced, so it is neither flagged nor declined. Kept distinct from
-# the three real verdicts (and from RUN_FAILED_VERDICT, which describes a
-# single run rather than a candidate's aggregate outcome).
+# Aggregate outcome when all runs for a candidate fail.
 NO_VERDICT = "insufficient_data"
 
 
@@ -119,19 +101,15 @@ class EvalResult:
     n_candidates_total: int
     n_excluded_train: int
     n_eligible: int
-    # Eligible candidates every run of which failed -- present in `records`
-    # but excluded from `metrics`/`breakdown` (no verdict was produced).
+    # Retain these candidates in records so coverage can be reported.
     n_unscored_failed: int = 0
-    # Total individual agent runs attempted vs. failed, across records +
-    # stability -- the headline "is this run trustworthy at all?" number.
+    # Totals include the stability experiment.
     n_runs_attempted: int = 0
     n_runs_failed: int = 0
 
 
 def fetch_ring_tags(driver, config: Neo4jConfig) -> dict[str, dict[str, Any]]:
-    """account_id -> {ring_id, ring_type, difficulty, split} for every
-    planted-ring member, straight from Neo4j's ground-truth properties.
-    """
+    """Load the ground-truth tag stored on each account in Neo4j."""
     with driver.session(database=config.database) as session:
         rows = session.run(
             "MATCH (a:Account) WHERE a.ring_id IS NOT NULL "
@@ -145,11 +123,7 @@ def fetch_ring_tags(driver, config: Neo4jConfig) -> dict[str, dict[str, Any]]:
 
 
 def label_candidate(candidate: Candidate, ring_tags: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    """Determine a candidate's ground truth + eval eligibility (see module
-    docstring). Matches on any member overlapping a tagged account -- ring
-    planting doesn't reuse accounts across rings, so the first hit is the
-    match.
-    """
+    """Use the first tagged member to assign a label and determine eligibility."""
     matched = next((ring_tags[m] for m in candidate.members if m in ring_tags), None)
 
     if matched is None:
@@ -167,10 +141,7 @@ def label_candidate(candidate: Candidate, ring_tags: dict[str, dict[str, Any]]) 
 
 
 def scoreable(records: list[CandidateRecord]) -> list[CandidateRecord]:
-    """Records that actually have a verdict. A candidate whose every run
-    failed produced none, and scoring it as a negative prediction would
-    invent a judgment the agent never made.
-    """
+    """Return candidates with at least one completed verdict."""
     return [r for r in records if r.predicted_verdict != NO_VERDICT]
 
 
@@ -201,12 +172,7 @@ def compute_breakdown(records: list[CandidateRecord]) -> list[BreakdownRow]:
 
 
 def select_borderline(records: list[CandidateRecord], k: int = STABILITY_CANDIDATES) -> list[CandidateRecord]:
-    """Pick the k candidates closest to a real decision boundary. Only
-    shared_payout has one (FLAG_SCORE_FLOOR) -- shared_device and
-    circular_flow only ever score near 1.0 or don't appear as a candidate at
-    all (see detection.py's module docstring), so there's no genuine
-    gray zone to test stability on outside shared_payout.
-    """
+    """Sample near the payout floor, the only method-specific flag threshold."""
     floor = FLAG_SCORE_FLOOR.get("shared_payout", 0.0)
     pool = [r for r in records if r.method == "shared_payout"]
     pool.sort(key=lambda r: abs(r.suspicion_score - floor))
@@ -214,10 +180,7 @@ def select_borderline(records: list[CandidateRecord], k: int = STABILITY_CANDIDA
 
 
 def _run_one(app, candidate: Candidate, thread_id: str) -> dict[str, Any]:
-    """One agent run. Any exception that escapes the graph is caught here
-    and turned into a failed-run result rather than aborting the batch: a
-    single Groq outage must not cost every other candidate's results.
-    """
+    """Record escaped graph errors so the evaluation batch can continue."""
     try:
         return run_agent(app, dataclasses.asdict(candidate), thread_id=thread_id)
     except Exception as err:  # noqa: BLE001 -- deliberately broad; see docstring
@@ -235,11 +198,7 @@ def _run_succeeded(result: dict[str, Any]) -> bool:
 
 
 def _majority_vote(verdicts: list[str]) -> tuple[str, float | None]:
-    """(modal verdict, flip_rate) over *completed* runs only -- flip_rate is
-    the fraction of `verdicts` that disagreed with the modal one. An empty
-    list means no run ever produced a verdict: (NO_VERDICT, None), never a
-    silent fallback onto one of the real verdicts.
-    """
+    """Return the modal verdict and fraction of completed runs that disagree."""
     if not verdicts:
         return NO_VERDICT, None
     counts = Counter(verdicts)
@@ -265,12 +224,7 @@ class RepeatedRun:
 
 
 def run_candidate_repeated(app, candidate: Candidate, thread_id_prefix: str, n_runs: int) -> RepeatedRun:
-    """Run `candidate` through the agent n_runs times (fresh thread_id each
-    time, so no checkpoint is reused across runs).
-
-    Runs whose LLM calls failed are recorded but EXCLUDED from the majority
-    vote and flip_rate -- see this module's "Failed runs are not votes".
-    """
+    """Vote across successful runs using a fresh checkpoint thread for each run."""
     results = [_run_one(app, candidate, thread_id=f"{thread_id_prefix}-{i}") for i in range(n_runs)]
     succeeded = [r for r in results if _run_succeeded(r)]
     failed = [r for r in results if not _run_succeeded(r)]
@@ -332,11 +286,7 @@ def run_evaluation(n_main_runs: int = MAIN_EVAL_RUNS, n_stability_runs: int = ST
 
         candidates_by_id[candidate.candidate_id] = candidate
         run = run_candidate_repeated(app, candidate, thread_id_prefix=f"eval-{candidate.candidate_id}", n_runs=n_main_runs)
-        # Representative run for the stored diagnosis/grounding trail: the
-        # first *succeeded* run whose own verdict matches the modal verdict,
-        # so what's displayed is consistent with the verdict actually used
-        # for scoring. If every run failed there is no such run -- fall back
-        # to the first attempt so the failure trail is still recorded.
+        # Save a diagnosis supporting the modal verdict, or the first failure as a fallback.
         representative = next(
             (r for r in run.succeeded_results if r["final_verdict"] == run.modal_verdict), run.results[0]
         )

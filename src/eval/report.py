@@ -94,9 +94,8 @@ def generate_report(result: EvalResult) -> str:
 
     parts.append("# Abuse Ring Sentinel -- Evaluation Report\n")
     parts.append(
-        "Scored on the held-out **test split only** -- the train split exists purely for threshold "
-        "tuning. Candidates whose matched planted ring is in the train split are excluded from "
-        "scoring entirely, not counted as errors either way.\n"
+        "Scoring includes test-split ring matches and candidates without ring tags. "
+        "Candidates matching a train-split ring are excluded.\n"
     )
     parts.append(
         f"- Candidates from detection.py: **{result.n_candidates_total}**\n"
@@ -116,12 +115,9 @@ def generate_report(result: EvalResult) -> str:
             "eval once quota allows for a clean measurement.\n"
         )
     parts.append(
-        "> **Caveat:** `FLAG_SCORE_FLOOR` (the shared_payout evidence-sufficiency threshold in "
-        "`agent/nodes.py`) was chosen during development by looking directly at this project's own "
-        "C680344850 false positive and a few obvious/subtle score examples. That candidate's *outcome* "
-        "is still legitimate to report -- it's real, unplanted data, never itself used for tuning -- but "
-        "the threshold that routes it was not tuned blind. Treat the numbers below as representative of "
-        "the design's behavior on a small synthetic set, not as a rigorously held-out benchmark.\n"
+        "> **Evaluation caveat.** The unplanted PaySim candidate `C680344850` helped inform the "
+        "shared-payout `FLAG_SCORE_FLOOR` and is included in the scored set. Treat the metrics "
+        "as descriptive results from a small sample. [Evaluation notes](../../docs/EVALUATION.md)\n"
     )
 
     parts.append("## Overall metrics\n")

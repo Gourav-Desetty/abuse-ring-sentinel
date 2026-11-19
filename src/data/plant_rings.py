@@ -1,22 +1,4 @@
-"""Plant synthetic collusion rings on top of a PaySim-derived transaction graph.
-
-PaySim's ``isFraud``/``isFlaggedFraud`` are not ring labels (see
-``load_paysim.py``), so ring ground truth has to be manufactured: this module
-builds a directed transaction graph from real PaySim edges and stamps three
-kinds of collusion ring onto it, each at "obvious" and "subtle" difficulty so
-precision/recall on the result is meaningful rather than trivially perfect:
-
-- **shared_device**: multiple accounts tagged with the same synthetic device
-  ID.
-- **shared_payout**: multiple accounts routing funds into the same
-  downstream payout account.
-- **circular_flow**: an A -> B -> C -> ... -> A transaction cycle.
-
-It also plants **legit_cluster** groups that superficially resemble
-shared_payout rings (many customers paying one popular merchant) but are not
-collusive, to act as hard negatives -- without them, precision/recall would
-be measured against an unrealistically easy problem.
-"""
+"""Plant labeled collusion rings and hard negatives in PaySim (see docs/DATA.md)."""
 
 from __future__ import annotations
 
@@ -70,7 +52,7 @@ def build_base_graph(df: pd.DataFrame) -> nx.MultiDiGraph:
 
 
 def _amount_sample(df: pd.DataFrame, rng: random.Random) -> float:
-    """Draw a realistic amount from the real transaction-amount distribution."""
+    """Reuse PaySim amounts to match the base transaction distribution."""
     idx = rng.randrange(len(df))
     return float(df["amount"].iloc[idx])
 
@@ -91,13 +73,7 @@ def plant_shared_device_ring(
     size: int,
     difficulty: str,
 ) -> Ring:
-    """Tag `size` existing customer accounts with the same synthetic device ID.
-
-    Obvious: members also make a payment to a common merchant within a
-    tight step window, so both the device link and a transaction pattern
-    point at the ring. Subtle: only the device_id node attribute is shared
-    -- no accompanying transaction pattern.
-    """
+    """Share a device ID and add a corroborating payment pattern for obvious rings."""
     candidates = _customer_nodes(g)
     members = rng.sample(candidates, k=size)
     device_id = f"DEV-{ring_id}"
@@ -129,11 +105,7 @@ def plant_shared_payout_ring(
     size: int,
     difficulty: str,
 ) -> Ring:
-    """Route `size` customer accounts into the same new downstream payout account.
-
-    Obvious: all legs land in a tight step window (fast fan-in). Subtle:
-    legs are spread over a wide window, closer to coincidental timing.
-    """
+    """Route funds to one payout account, with wider timing for subtle rings."""
     members = rng.sample(_customer_nodes(g), k=size)
     payout_node = f"C-PAYOUT-{ring_id}"
     g.add_node(payout_node, kind="C")
@@ -162,12 +134,7 @@ def plant_circular_flow_ring(
     size: int,
     difficulty: str,
 ) -> Ring:
-    """Create an A -> B -> C -> ... -> A transaction cycle.
-
-    Obvious: every leg carries (near) the same amount in quick succession --
-    classic layering. Subtle: amount shrinks a little each hop (as if a cut
-    is taken) and legs are spread further apart in time.
-    """
+    """Plant a transfer cycle with varied amounts and wider gaps for subtle rings."""
     members = rng.sample(_customer_nodes(g), k=size)
 
     base_step = rng.randint(1, 700)
@@ -196,10 +163,7 @@ def plant_legit_cluster(
     ring_id: str,
     size: int,
 ) -> Ring:
-    """Plant a non-collusive hard negative: many customers paying one popular
-    merchant, spread widely over time with no shared device -- superficially
-    similar fan-in to shared_payout, but nothing colludes them.
-    """
+    """Mimic payout fan-in with independent payments to a popular merchant."""
     members = rng.sample(_customer_nodes(g), k=size)
     merchant = rng.choice(_merchant_nodes(g))
     for node in members:
@@ -226,12 +190,7 @@ def plant_rings(
     df: pd.DataFrame,
     config: PlantConfig | None = None,
 ) -> tuple[nx.MultiDiGraph, list[Ring]]:
-    """Build the base graph from `df` and plant collusion rings + legit clusters.
-
-    Returns the mutated graph and the list of planted `Ring`s (with `.split`
-    set to "train"/"test" per `config.test_fraction`, stratified by
-    ring_type + difficulty so both splits contain every kind of ring).
-    """
+    """Return the PaySim graph and planted rings with stratified train/test labels."""
     config = config or PlantConfig()
     rng = random.Random(config.random_seed)
 
@@ -259,9 +218,7 @@ def plant_rings(
 
 
 def _assign_splits(rings: list[Ring], test_fraction: float, rng: random.Random) -> None:
-    """Stratify train/test by (ring_type, difficulty) so both splits contain
-    every kind of ring, and never used for threshold tuning once assigned.
-    """
+    """Stratify by ring type and difficulty, keeping singletons in training."""
     from collections import defaultdict
 
     groups: dict[tuple[str, str | None], list[Ring]] = defaultdict(list)
@@ -295,7 +252,6 @@ def rings_to_frame(rings: list[Ring]) -> pd.DataFrame:
 
 
 def summarize(g: nx.MultiDiGraph, rings: list[Ring]) -> None:
-    """Print a quick sanity report -- used to eyeball plant_rings's output."""
     print(f"graph: {g.number_of_nodes():,} nodes, {g.number_of_edges():,} edges")
     planted_edges = sum(1 for _, _, d in g.edges(data=True) if d.get("planted"))
     print(f"planted edges: {planted_edges:,}")
