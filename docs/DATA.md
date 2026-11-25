@@ -48,47 +48,31 @@ PaySim rows, then plants synthetic rings on top with `networkx`. This
 planted structure -- not anything in the original CSV -- is the actual
 ground truth `src/eval/metrics.py` scores against.
 
-Three ring types, each planted at **obvious** and **subtle** difficulty (4
-rings per type/difficulty combo, 3-6 members each, drawn from real
-customer/merchant accounts):
+The default seed plants 90 positive rings and 45 benign cohorts. Each detection method
+has 15 obvious positives, 15 subtle positives, and 15 hard negatives.
 
-- **shared_device**: `size` accounts tagged with the same synthetic
-  `device_id`. Obvious also adds a synchronized payment from every member to
-  one shared merchant within a tight step window; subtle is the device tag
-  alone, no accompanying transaction pattern.
-- **shared_payout**: `size` accounts routed into one new downstream payout
-  account. Obvious lands every leg in a 5-step window (fast fan-in); subtle
-  spreads legs over a 60-step window, closer to coincidental timing.
-- **circular_flow**: an A -> B -> C -> ... -> A transaction cycle. Obvious
-  carries the same amount every leg, one step apart (classic layering);
-  subtle shrinks the amount slightly each hop and spaces legs 5-20 steps
-  apart.
+| Detector | Positive scenarios | Hard-negative scenarios |
+|---|---|---|
+| Shared device | Members repeatedly transfer to a common recipient, with tighter timing in obvious rings | A shared household device with occasional or repeated payments to a common recipient |
+| Shared payout | Several distinct senders repeatedly transfer to one personal account | Group expenses and installments also produce personal-account fan-in, sometimes within a tight window |
+| Circular flow | Transfers complete a chronological cycle, with repeated laps in obvious rings | Chains of reimbursements close a cycle and can have similar amounts or short gaps |
 
-Plus **legit_cluster** hard negatives (6 total): several customers paying
-one popular merchant, spread widely over time with no shared device --
-superficially the same fan-in shape as shared_payout, but not collusive.
-Without these, precision/recall would be measured against an unrealistically
-easy problem (see `src/eval/report.md`'s worked false-positive example for
-what this looks like on real, unplanted data too).
+Each labeled account belongs to one cohort. Payout recipients also belong to their
+cohort and are drawn from the same customer pool for both classes. Calibration and test
+are stratified by detection method, scenario, and difficulty. The default split holds out
+30 positive rings and 15 hard negatives. The stored Neo4j cohort tags are used for
+evaluation and the demo walkthrough. Detection queries use observed activity fields.
 
-**Train/test split**: stratified by `(ring_type, difficulty)` so both splits
-contain every kind of ring (~30% test per group, with a floor of at least 1
-ring). The test split is the only one `eval/metrics.py` scores against --
-train exists purely so a threshold like `FLAG_SCORE_FLOOR` could be tuned
-without touching held-out data. Every planted node/relationship carries
-`ring_id`/`ring_type`/`difficulty`/`split` properties directly in Neo4j (see
-`ARCHITECTURE.md` § Phase 1), so this ground truth is queryable, not just
-implicit in the Python objects that built it.
+Transaction edges store the PaySim sender's before and after balances. All planted
+cohorts use the same synthetic ledger, which funds their scheduled transfers and
+applies the debits and credits in step order. Those balances cover planted activity.
+Circular-flow evaluation records the sender balance mismatch count for the
+representative lap in `eval_results.json` when all its sender balances are available.
+The count is diagnostic and stays outside scoring and model evidence.
 
-## Scale actually used
-
-The results in `README.md`/`src/eval/report.md` were generated from a graph
-loaded with `--sample-frac 0.0157` (~100,005 sampled transactions out of the
-full 6,362,620): **192,715 account nodes, step range 1-765** (the full
-743-step timeline). `--sample-frac`, not `--nrows`, is what gives that full
-timeline -- `--nrows` takes PaySim's chronologically-first N rows, which
-only spans a handful of steps and silently breaks any time-window-based
-detection signal (see `ARCHITECTURE.md` § Phase 1).
+The default sample fraction of 0.0157 selects about 100,000 PaySim transactions across
+the full timeline before planting. The resulting evaluation measures performance on
+synthetic scenarios embedded in simulated transaction data.
 
 ## Reproducibility
 
