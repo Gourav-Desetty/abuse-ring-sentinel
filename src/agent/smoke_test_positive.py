@@ -1,7 +1,4 @@
-"""Smoke test: feed a real planted ring (obvious difficulty, suspicion_score
-near 1.0) through the full detect -> diagnose -> verify -> decide agent and
-confirm it comes back a real flag ("ring_flagged"), not "needs_more_data".
-"""
+"""Check that the agent flags an obvious planted ring."""
 
 from __future__ import annotations
 import dataclasses

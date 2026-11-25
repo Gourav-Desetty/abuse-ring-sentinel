@@ -1,12 +1,4 @@
-"""Retry-with-backoff wrapper for Groq LLM calls.
-
-Groq enforces both a per-minute (TPM) and a *daily* (TPD) token cap; TPM
-recovers with backoff, but TPD exhaustion reports minutes-to-hours waits far
-beyond MAX_RETRIES x MAX_DELAY. When retries are exhausted the call is a
-genuine infrastructure failure, not a real LLM judgment, so it raises
-`LLMCallFailed` -- a dedicated type callers catch narrowly and record as "no
-answer produced" rather than silently folding into a verdict.
-"""
+"""Retry rate-limited Groq calls and report failures when retries are exhausted."""
 
 from __future__ import annotations
 
@@ -29,13 +21,7 @@ MAX_DELAY = 30.0
 
 
 class LLMCallFailed(RuntimeError):
-    """An LLM call could not be completed -- infrastructure, not judgment.
-
-    Raised when retries are exhausted (typically Groq's daily token quota,
-    whose wait times dwarf MAX_RETRIES x MAX_DELAY). Callers catch this to
-    mark a run as *failed* rather than letting an absent answer masquerade
-    as a negative one.
-    """
+    """Indicate that an LLM call exhausted its retries without producing a judgment."""
 
     def __init__(self, message: str, *, cause: BaseException | None = None, attempts: int = 0) -> None:
         super().__init__(message)
@@ -44,13 +30,7 @@ class LLMCallFailed(RuntimeError):
 
 
 def invoke_with_retry(fn: Callable[[], T], max_retries: int = MAX_RETRIES, base_delay: float = BASE_DELAY) -> T:
-    """Call `fn()` (a zero-arg callable wrapping one `.invoke(...)`),
-    retrying on Groq rate-limit errors. Honors the "try again in Xms" hint
-    in the error message when present (it reflects the actual TPM bucket
-    refill); otherwise backs off exponentially, capped at MAX_DELAY.
-
-    Raises `LLMCallFailed` if every retry is exhausted.
-    """
+    """Retry Groq rate limits using the suggested delay or exponential backoff, raising LLMCallFailed on exhaustion."""
     for attempt in range(max_retries):
         try:
             return fn()

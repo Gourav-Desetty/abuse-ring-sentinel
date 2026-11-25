@@ -83,13 +83,18 @@ def route_after_detect(state: State) -> str:
     return "continue" if state["input_guardrail_passed"] else "reject"
 
 
+def _model_evidence(candidate: CandidateDict) -> dict[str, Any]:
+    """Keep the sender bookkeeping diagnostic available to reviewers only."""
+    return {key: value for key, value in candidate["evidence"].items() if key != "sender_balance_mismatch_count"}
+
+
 def diagnose_node(state: State, *, llm: ChatGroq) -> dict[str, Any]:
     candidate = state["candidate"]
     prompt = RING_ANALYSIS_PROMPT.format(
         method=candidate["method"],
         n_members=len(candidate["members"]),
         members=", ".join(candidate["members"]),
-        evidence=json.dumps(candidate["evidence"], indent=2, default=str),
+        evidence=json.dumps(_model_evidence(candidate), indent=2, default=str),
     )
     try:
         response = invoke_with_retry(lambda: llm.invoke(prompt))
@@ -115,7 +120,7 @@ def verify_node(state: State, *, guardrails: Guardrails) -> dict[str, Any]:
     diagnosis = state["diagnosis"]
     assert diagnosis is not None  # verify only runs after diagnose on the "continue" path
     # Method and member IDs can be cited because the diagnosis prompt includes them.
-    grounding_source = {"method": candidate["method"], "members": candidate["members"], **candidate["evidence"]}
+    grounding_source = {"method": candidate["method"], "members": candidate["members"], **_model_evidence(candidate)}
     result = guardrails.output_guardrail(diagnosis=diagnosis, evidence=grounding_source)
     update: dict[str, Any] = {"is_grounded": result.is_grounded, "hallucinated_claims": result.hallucinated_claims}
     if result.llm_failed:
@@ -125,12 +130,11 @@ def verify_node(state: State, *, guardrails: Guardrails) -> dict[str, Any]:
 
 _Q1_ANSWER_RE = re.compile(r"1\.\s*.*?\b(Yes|No|Unclear)\b", re.IGNORECASE | re.DOTALL)
 
-# Coincidental payouts can look grounded because they share timing and size signals
-# with planted rings. The flag floor favors precision at the cost of recall.
+# Default for standalone agent callers. Evaluation fits its own floor on calibration data.
 FLAG_SCORE_FLOOR = {"shared_payout": 0.4}
 
 
-def decide_node(state: State) -> dict[str, Any]:
+def decide_node(state: State, *, flag_score_floor: dict[str, float] | None = None) -> dict[str, Any]:
     """Resolve a verdict from grounding, the numbered Q1 answer, and the flag floor."""
     candidate = state["candidate"]
     # A failed verifier also sets is_grounded=False, so check run failure first.
@@ -154,7 +158,8 @@ def decide_node(state: State) -> dict[str, Any]:
     match = _Q1_ANSWER_RE.search(diagnosis)
     answer = match.group(1).lower() if match else "unclear"
 
-    score_floor = FLAG_SCORE_FLOOR.get(candidate["method"], 0.0)
+    floors = FLAG_SCORE_FLOOR if flag_score_floor is None else flag_score_floor
+    score_floor = floors.get(candidate["method"], 0.0)
     if answer == "yes" and candidate["suspicion_score"] < score_floor:
         return {
             "final_verdict": "needs_more_data",

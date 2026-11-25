@@ -1,15 +1,4 @@
-"""Smoke test: feed the real C680344850 false positive through the full
-detect -> diagnose -> verify -> decide agent and confirm it comes back
-"needs_more_data", not a false flag.
-
-C680344850 is a genuine (unplanted) PaySim account that detection.py's
-detect_shared_payout() surfaces as a shared_payout candidate: 3 real
-accounts happened to TRANSFER into it within a 3-step window, with no
-shared device_id and no other corroborating signal (see the earlier
-worked-example writeup). It passed detection.py's hard structural
-filters, so this is a genuine test of the *agent's* guardrails, not a
-strawman detection.py would have caught anyway.
-"""
+"""Check that the agent returns needs_more_data for the unplanted PaySim payout candidate C680344850."""
 
 from __future__ import annotations
 import dataclasses
