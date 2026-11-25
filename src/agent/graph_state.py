@@ -1,18 +1,4 @@
-"""The LangGraph state machine: detect -> diagnose -> verify -> decide.
-
-`detect` and `diagnose` can each short-circuit straight to END: `detect`
-skips the rest when the candidate fails the input guardrail's score floor
-(no LLM call wasted on something that shouldn't reach the agent); `diagnose`
-skips the rest when its LLM call exhausts retries, ending the run with
-`final_verdict=nodes.RUN_FAILED_VERDICT` -- deliberately not one of the
-three real verdicts, so downstream scoring drops it rather than counting an
-infrastructure outage as a declined flag.
-
-Compiled with `interrupt_before=["decide"]` so execution pauses after
-verify for a human to inspect the diagnosis before the verdict finalizes.
-`run_agent()` auto-resumes by default (batch/eval usage); a review UI would
-call `resume()` only after approval.
-"""
+"""Run ring detection, diagnosis, verification, and verdicts in a checkpointed LangGraph workflow."""
 
 from __future__ import annotations
 
@@ -59,19 +45,16 @@ def initial_state(candidate: CandidateDict) -> RingState:
     )
 
 
-def build_graph(llm: ChatGroq, guardrails: Guardrails, checkpointer: InMemorySaver | None = None):
-    """Wire the four nodes into a compiled, checkpointed LangGraph app.
-
-    Build this once per process/batch and reuse the returned app across
-    candidates (via run_agent/resume) -- each compiled app owns one
-    checkpointer, and a thread_id paused mid-graph can only be resumed
-    against the same checkpointer that paused it, not a freshly-built one.
-    """
+def build_graph(
+    llm: ChatGroq, guardrails: Guardrails, checkpointer: InMemorySaver | None = None,
+    *, flag_score_floor: dict[str, float] | None = None,
+):
+    """Compile a reusable agent graph that pauses before the verdict for review."""
     graph = StateGraph(RingState)
     graph.add_node("detect", functools.partial(detect_node, guardrails=guardrails))
     graph.add_node("diagnose", functools.partial(diagnose_node, llm=llm))
     graph.add_node("verify", functools.partial(verify_node, guardrails=guardrails))
-    graph.add_node("decide", decide_node)
+    graph.add_node("decide", functools.partial(decide_node, flag_score_floor=flag_score_floor))
 
     graph.add_edge(START, "detect")
     graph.add_conditional_edges("detect", route_after_detect, {"continue": "diagnose", "reject": END})
@@ -83,14 +66,7 @@ def build_graph(llm: ChatGroq, guardrails: Guardrails, checkpointer: InMemorySav
 
 
 def run_agent(app, candidate: CandidateDict, thread_id: str, auto_resume: bool = True) -> dict[str, Any]:
-    """Run one candidate through a compiled `app` (see build_graph). Returns
-    the final state dict.
-
-    If the input guardrail rejects the candidate, this returns immediately
-    (final_verdict="needs_more_data") without pausing -- there's nothing
-    for a human to review yet. Otherwise it runs detect -> diagnose ->
-    verify, pauses before decide, and (if auto_resume) resumes right away.
-    """
+    """Run a candidate and return its state, resuming past the review checkpoint when auto_resume is enabled."""
     config = {"configurable": {"thread_id": thread_id}}
     result = app.invoke(initial_state(candidate), config)
     if auto_resume and app.get_state(config).next:
@@ -99,10 +75,6 @@ def run_agent(app, candidate: CandidateDict, thread_id: str, auto_resume: bool =
 
 
 def resume(app, thread_id: str) -> dict[str, Any]:
-    """Resume a graph paused at the interrupt_before=["decide"] checkpoint
-    -- call after a human has reviewed the diagnosis and approves finalizing
-    the verdict. `app` must be the same compiled graph (same checkpointer)
-    that paused this thread_id.
-    """
+    """Resume a reviewed thread on the graph that created its checkpoint and return the final state."""
     config = {"configurable": {"thread_id": thread_id}}
     return app.invoke(None, config)
