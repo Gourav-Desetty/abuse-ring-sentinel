@@ -16,4 +16,5 @@ dependencies = [
     "pandas>=3.0.5",
     "pydantic>=2.13.4",
     "python-dotenv>=1.2.3",
+    "truststore>=0.10.5",
 ]
