@@ -1,5 +1,4 @@
-"""Single-command pipeline entrypoint: build graph -> detect -> eval -> report.
-"""
+"""Build the graph, detect candidate rings, evaluate verdicts, and generate the report."""
 
 from __future__ import annotations
 
