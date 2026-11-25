@@ -1,17 +1,51 @@
-# Evaluation and Groq notes
+# Evaluation protocol
 
-## Scoring
+## Calibration and held-out test
 
-- A candidate takes its label from the first member with a stored ring tag. Test-split collusion matches are positive, test-split `legit_cluster` matches are negative, and train-split matches are excluded. Candidates without a tag are eligible negatives.
-- The full agent runs five times per candidate, using a fresh checkpoint thread each time. The most frequent verdict among successful runs is scored. The flip rate is the fraction of those runs that disagree with it.
-- Failed calls are recorded and excluded from the vote. When all attempts fail, the candidate is unscored. The stability experiment runs six times per candidate for up to four shared-payout candidates closest to the `0.4` flag threshold.
+The seeded benchmark contains 90 positive rings and 45 known benign cohorts. Of those,
+30 positives and 15 hard negatives are held out. The split is stratified by scenario
+and difficulty, and no labeled account appears in both sets.
 
-The saved run scored seven of 25 detections, with six positives and one negative. It flagged three of the positives and zero negatives, yielding 100% precision and 50% recall. Treat those results as a description of this run. The unplanted PaySim negative, `C680344850`, helped inform the `0.4` payout flag threshold and also appears in the scored set. [Saved report](../src/eval/report.md)
+A candidate matches a cohort when it covers every cohort member, those members are
+a majority of its accounts, and the detector matches the planted scenario. Payout
+matches also require the labeled recipient. Candidates touching multiple cohorts
+are excluded. The highest-scoring match represents each cohort, with ties resolved
+by candidate ID before any model calls. Unmatched detections have unknown ground
+truth and are counted in the report.
+
+Each detector's flag floor minimizes balanced classification error on the scores
+of its matched calibration cohorts. A method needs both positive and benign
+calibration cohorts to get a floor. Evaluation applies these floors to grounded
+positive verdicts and fits them exclusively on the training split.
+
+## Metrics
+
+- **Candidate precision** measures how many flagged, scored candidates are positives.
+  **Candidate recall** measures the fraction of scored positive candidates flagged.
+- **Ring detection recall** divides the number of matched positive test rings by all
+  positive test rings. **Ring verdict recall** uses the rings whose candidate was
+  flagged as the numerator. Both denominators include rings that never yielded a candidate.
+- **Hard-negative coverage** shows how many examples of each benign scenario were
+  planted, matched, scored, and flagged.
+- **Run coverage** records model failures. Successful runs vote for the final verdict.
+  A candidate with zero completed attempts is excluded from candidate metrics. Its
+  ring remains in the ring-level denominator. The optional stability experiment
+  repeats selected payout candidates near the calibrated floor.
+
+The evaluation estimates performance on planted scenarios in PaySim. It measures
+candidate precision on the labeled cohort, so production precision remains unknown.
+See [the demo](DEMO.md) for a reproducible run and [the full report](../src/eval/report.md)
+for evidence, model diagnoses, and final verdicts.
 
 ## Development notes
 
-- Before repeated voting, evaluation runs against the same graph returned 50% and about 17% recall. That variation motivated repeat runs for all eligible candidates.
-- Payout fan-in size and timing can look similar for coincidental and planted groups. `C680344850` scored `0.2885` and received a grounded “Yes” diagnosis. The separate flag floor held it back at the cost of missing two planted payout candidates in the saved run.
-- The output guardrail uses `with_structured_output(..., method="json_schema")` with Groq's `openai/gpt-oss-120b`. During development, the tool-calling method returned HTTP 400 with “Tool choice is required, but model did not call a tool.” The JSON schema path returned the expected `ValidationResult`.
-- An earlier verifier treated severity ratings such as “Medium” as unsupported claims, reducing recall. The current verifier checks concrete facts such as IDs, amounts, and time windows. The diagnosis supplies the verdict, mechanism, and severity.
-- Groq's daily token cap can outlast retry backoff. The guardrail fails closed and records the missing judgment so a quota failure is excluded from scoring. Rerun after the quota resets if it affected coverage.
+- Before repeated voting, evaluation runs against the same graph yielded 50%
+  and about 17% recall. The default evaluation uses five attempts per candidate
+  and six additional attempts for up to four borderline payout candidates.
+- The verifier uses Groq structured output with `method="json_schema"`.
+  The tool-calling path returned HTTP 400 when the model omitted the requested
+  tool call. The JSON schema path returned the expected `ValidationResult`.
+- The grounding check covers concrete facts such as IDs, amounts, and time
+  windows. The diagnosis provides the interpretation and severity rating.
+- Groq's daily token cap can outlast retry backoff. The evaluator records the
+  resulting missing verdict so run coverage is visible in the report.
