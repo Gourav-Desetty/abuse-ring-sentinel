@@ -29,8 +29,8 @@ flowchart TB
 | Step | File | What it does |
 |---|---|---|
 | Load | `src/data/load_paysim.py` | Reads `archive/paysim.csv`, validates schema, tightens dtypes, derives `orig_kind`/`dest_kind` (customer vs. merchant) from PaySim's `C`/`M` naming convention. |
-| Plant | `src/data/plant_rings.py` | Builds a directed transaction graph from the loaded rows, then plants synthetic `shared_device`, `shared_payout`, and `circular_flow` rings (each at "obvious" and "subtle" difficulty) plus `legit_cluster` hard negatives, stratified train/test per ring type. This is the ground truth `eval/metrics.py` scores against. |
-| Push | `src/data/build_graph.py` | UNWIND-batched writes into Neo4j: `(:Account {account_id, kind, device_id?})` nodes, `(:Account)-[:TRANSACTED_WITH {amount, step, type}]->(:Account)` for every transaction (real + planted), `(:Account)-[:SHARES_PAYOUT]->(:Account)` derived from each shared_payout ring's actual planted legs. Every planted node/relationship carries `ring_id`, `ring_type`, `difficulty`, `split` — ground truth is queryable in Neo4j directly, not only in Python. |
+| Plant | `src/data/plant_rings.py` | Builds a directed transaction graph from the loaded rows, then plants synthetic `shared_device`, `shared_payout`, and `circular_flow` rings (each at "obvious" and "subtle" difficulty) plus benign counterparts for all three methods, with account-disjoint calibration and test cohorts. This is the ground truth `eval/metrics.py` scores against. |
+| Push | `src/data/build_graph.py` | UNWIND-batched writes into Neo4j: `(:Account {account_id, kind, device_id?})` nodes, `(:Account)-[:TRANSACTED_WITH {amount, step, type}]->(:Account)` for every transaction (PaySim + planted), `(:Account)-[:SHARES_PAYOUT]->(:Account)` derived from each shared_payout ring's actual planted legs. Cohort members and planted transactions carry `ring_id`, `ring_type`, `difficulty`, and `split`. Payout cohort members also store the labeled recipient. |
 
 **Sampling matters here in a way that isn't obvious**: load with `--sample-frac`,
 not `--nrows`. PaySim's rows are ordered by `step`; `--nrows N` takes the
@@ -55,29 +55,14 @@ black-box community-detection score would be. `src/detection/detection.py`
 implements each ring type as a targeted, explainable check instead of a
 generic clustering pass:
 
-- **shared_device** → group accounts by the `device_id` node property.
-- **shared_payout** → accounts whose `TRANSACTED_WITH` edges fan into the
-  same `kind='C'` (personal, not merchant) destination account, restricted
-  to `TRANSFER`-type edges and a bounded group size / step window. All three
-  filters are load-bearing: PaySim's `nameDest` id reuse means raw fan-in
-  count alone produced thousands of false candidates during development
-  (see `detection.py`'s module docstring for the full story).
-- **circular_flow** → a bounded `(a)-[:TRANSACTED_WITH*3..6]->(a)` path
-  query — a direct, explainable cycle check in place of a general-purpose
-  strongly-connected-components pass.
-
-Each match also comes with a plain-language reason for free (which device,
-which destination account, which cycle) — something a community-detection
-membership score doesn't hand you on its own, and that the guardrail layer
-downstream needs anyway to cite concrete evidence.
-
-This also turns out to be the pragmatic choice: it runs in low single-digit
-seconds at this graph's size (~150-190K nodes), and it sidesteps a metered
-compute dependency — Neo4j's Graph Data Science library isn't bundled with
-AuraDB Free, only offered as a separate billed product (Aura Graph Analytics
-Serverless, ~$0.40/GB-hour per session). Worth knowing, but secondary to the
-main reason: this is the right tool for detecting patterns whose shape is
-already known, not a workaround for one that costs money.
+- **Shared device** groups accounts by device ID and scores their transaction frequency,
+  common recipients, and repeat payments to those recipients.
+- **Shared payout** finds personal-account transfer windows and scores unique senders,
+  repeated senders, transfer frequency, and the size of the time window.
+- **Circular flow** finds simple directed transfer cycles in chronological order within
+  72 hours. It scores amount similarity (30%), average time between hops (20%),
+  non-overlapping repeats (20%), and consistency of successive amount ratios (30%).
+  Flat amounts and a steady proportional decrease both receive full ratio credit.
 
 ### The agent: detect → diagnose → verify → decide
 
@@ -105,14 +90,10 @@ unsupported flag.
 
 ### Evaluation
 
-`src/eval/metrics.py` runs every candidate `detection.py` finds through
-the full agent, scores only the held-out **test split** against planted
-ground truth (train-split matches are excluded from scoring, not counted as
-errors), computes precision/recall/false-positive cost broken down by
-ring_type and difficulty, and runs a verdict-stability side-experiment on
-borderline candidates (same candidate, run repeatedly, to separate genuine
-detector behavior from LLM sampling noise). `src/eval/report.py` renders the
-result into `src/eval/report.md`.
+`src/eval/metrics.py` fits a flag floor per method with calibration cohorts and
+runs one representative per matched held-out cohort through the agent. The report
+shows candidate precision and recall, detector and verdict recall over all held-out
+positive rings, and coverage for each hard-negative scenario. [Evaluation protocol](docs/EVALUATION.md)
 
 ### Running it
 
