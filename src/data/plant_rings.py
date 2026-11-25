@@ -1,32 +1,40 @@
-"""Plant labeled collusion rings and hard negatives in PaySim (see docs/DATA.md)."""
+"""Plant account-disjoint collusion rings and hard negatives in PaySim."""
 
 from __future__ import annotations
 
 import random
+from collections import defaultdict
 from dataclasses import dataclass
+from itertools import repeat
 
 import networkx as nx
 import pandas as pd
 
 DIFFICULTIES = ("obvious", "subtle")
+METHODS = ("shared_device", "shared_payout", "circular_flow")
+BENIGN_METHODS = {
+    "legit_shared_device": "shared_device",
+    "legit_personal_transfers": "shared_payout",
+    "legit_circular_flow": "circular_flow",
+}
 
 
 @dataclass
 class Ring:
     ring_id: str
-    ring_type: str  # "shared_device" | "shared_payout" | "circular_flow" | "legit_cluster"
-    difficulty: str | None  # "obvious" | "subtle", None for legit_cluster
+    ring_type: str
+    difficulty: str | None
     members: list[str]
-    split: str = "train"  # "train" | "test", assigned by hold-out step
+    split: str = "train"
 
 
 @dataclass
 class PlantConfig:
-    rings_per_type_per_difficulty: int = 4
-    legit_clusters: int = 6
+    rings_per_type_per_difficulty: int = 15
+    negatives_per_method: int = 15
     min_ring_size: int = 3
     max_ring_size: int = 6
-    test_fraction: float = 0.3
+    test_fraction: float = 1 / 3
     random_seed: int = 42
 
 
@@ -36,207 +44,137 @@ def build_base_graph(df: pd.DataFrame) -> nx.MultiDiGraph:
     columns = zip(
         df["nameOrig"], df["nameDest"], df["amount"], df["step"], df["type"],
         df["orig_kind"], df["dest_kind"],
+        df.get("oldbalanceOrg", repeat(None)), df.get("newbalanceOrig", repeat(None)),
     )
-    for name_orig, name_dest, amount, step, tx_type, orig_kind, dest_kind in columns:
+    for name_orig, name_dest, amount, step, tx_type, orig_kind, dest_kind, old_balance, new_balance in columns:
         g.add_node(name_orig, kind=orig_kind)
         g.add_node(name_dest, kind=dest_kind)
         g.add_edge(
-            name_orig,
-            name_dest,
-            amount=float(amount),
-            step=int(step),
-            type=tx_type,
-            planted=False,
+            name_orig, name_dest, amount=float(amount), step=int(step), type=tx_type, planted=False,
+            oldbalanceOrg=float(old_balance) if pd.notna(old_balance) else None,
+            newbalanceOrig=float(new_balance) if pd.notna(new_balance) else None,
         )
     return g
 
 
-def _amount_sample(df: pd.DataFrame, rng: random.Random) -> float:
-    """Reuse PaySim amounts to match the base transaction distribution."""
-    idx = rng.randrange(len(df))
-    return float(df["amount"].iloc[idx])
+def _plant_pattern(
+    g: nx.MultiDiGraph, df: pd.DataFrame, rng: random.Random, balance_rng: random.Random,
+    ring: Ring, method: str,
+) -> None:
+    members = ring.members
+    benign = ring.difficulty is None
+    subtle = ring.difficulty == "subtle"
+    base = rng.randint(1, 600)
+    transfers: list[tuple[int, str, str, int]] = []
 
+    def transfer(sender: str, recipient: str, amount: float, step: int) -> None:
+        transfers.append((step, sender, recipient, round(round(amount, 2) * 100)))
 
-def _customer_nodes(g: nx.MultiDiGraph) -> list[str]:
-    return [n for n, d in g.nodes(data=True) if d.get("kind") == "C"]
+    amount = float(df["amount"].iloc[rng.randrange(len(df))])
+    if method == "shared_device":
+        for member in members:
+            g.nodes[member]["device_id"] = f"DEV-{members[0]}"
+        # A household can pay a common recipient in the same period, including on repeat occasions.
+        rounds = rng.choice((1, 1, 2)) if benign else (2 if subtle else 3)
+        for visit in range(rounds):
+            for member in members:
+                transfer(
+                    member, f"C-CONTEXT-{members[0]}", amount * rng.uniform(0.2, 1.8),
+                    base + visit * 24 + rng.randint(0, 18 if benign or subtle else 2),
+                )
+    elif method == "shared_payout":
+        senders, recipient = members[:-1], members[-1]
+        # Group expenses can produce a tight burst. Some participants also reimburse in installments.
+        rounds = rng.choice((1, 1, 2)) if benign else (2 if subtle else 3)
+        spread = rng.choice((3, 12, 28)) if benign else (25 if subtle else 3)
+        for i in range(rounds):
+            for sender in senders:
+                step = base + i * 12 + rng.randint(0, spread)
+                transfer(sender, recipient, amount * rng.uniform(0.4, 1.6) / rounds, step)
+    else:
+        # Chains of reimbursements can close a loop, sometimes quickly and with similar amounts.
+        gap = rng.choice((1, 4, 12)) if benign else (rng.randint(6, 19) if subtle else 1)
+        rounds = 1 if benign or subtle else 3
+        for lap in range(rounds):
+            for i, member in enumerate(members):
+                factor = rng.uniform(0.55, 1.3) if benign else (0.92 ** i if subtle else 1)
+                transfer(member, members[(i + 1) % len(members)], amount * factor, base + lap * 24 + i * gap)
 
+    # Give senders enough funds for the scheduled transfers plus a sampled reserve.
+    # The synthetic ledger covers only these transfers and uses cents to avoid drift.
+    balances: defaultdict[str, int] = defaultdict(int)
+    for _, sender, _, cents in transfers:
+        balances[sender] += cents
+    observed_reserves = df.get("newbalanceOrig")
+    if observed_reserves is not None:
+        for sender in balances:
+            reserve = observed_reserves.iloc[balance_rng.randrange(len(df))]
+            if pd.notna(reserve):
+                balances[sender] += round(max(float(reserve), 0) * 100)
 
-def _merchant_nodes(g: nx.MultiDiGraph) -> list[str]:
-    return [n for n, d in g.nodes(data=True) if d.get("kind") == "M"]
-
-
-def plant_shared_device_ring(
-    g: nx.MultiDiGraph,
-    df: pd.DataFrame,
-    rng: random.Random,
-    ring_id: str,
-    size: int,
-    difficulty: str,
-) -> Ring:
-    """Share a device ID and add a corroborating payment pattern for obvious rings."""
-    candidates = _customer_nodes(g)
-    members = rng.sample(candidates, k=size)
-    device_id = f"DEV-{ring_id}"
-    for node in members:
-        g.nodes[node]["device_id"] = device_id
-
-    if difficulty == "obvious":
-        shared_merchant = rng.choice(_merchant_nodes(g))
-        base_step = rng.randint(1, 700)
-        for node in members:
-            g.add_edge(
-                node,
-                shared_merchant,
-                amount=_amount_sample(df, rng),
-                step=base_step + rng.randint(0, 3),
-                type="PAYMENT",
-                planted=True,
-                ring_id=ring_id,
-            )
-
-    return Ring(ring_id, "shared_device", difficulty, members)
-
-
-def plant_shared_payout_ring(
-    g: nx.MultiDiGraph,
-    df: pd.DataFrame,
-    rng: random.Random,
-    ring_id: str,
-    size: int,
-    difficulty: str,
-) -> Ring:
-    """Route funds to one payout account, with wider timing for subtle rings."""
-    members = rng.sample(_customer_nodes(g), k=size)
-    payout_node = f"C-PAYOUT-{ring_id}"
-    g.add_node(payout_node, kind="C")
-
-    base_step = rng.randint(1, 700)
-    window = 5 if difficulty == "obvious" else 60
-    for node in members:
+    for step, sender, recipient, cents in sorted(transfers, key=lambda tx: tx[0]):
+        old_balance = balances[sender]
+        balances[sender] -= cents
+        balances[recipient] += cents
         g.add_edge(
-            node,
-            payout_node,
-            amount=_amount_sample(df, rng),
-            step=base_step + rng.randint(0, window),
-            type="TRANSFER",
-            planted=True,
-            ring_id=ring_id,
+            sender, recipient, amount=cents / 100, step=step,
+            type="TRANSFER", planted=True, ring_id=ring.ring_id,
+            oldbalanceOrg=old_balance / 100, newbalanceOrig=balances[sender] / 100,
         )
-
-    return Ring(ring_id, "shared_payout", difficulty, members + [payout_node])
-
-
-def plant_circular_flow_ring(
-    g: nx.MultiDiGraph,
-    df: pd.DataFrame,
-    rng: random.Random,
-    ring_id: str,
-    size: int,
-    difficulty: str,
-) -> Ring:
-    """Plant a transfer cycle with varied amounts and wider gaps for subtle rings."""
-    members = rng.sample(_customer_nodes(g), k=size)
-
-    base_step = rng.randint(1, 700)
-    step_gap = 1 if difficulty == "obvious" else rng.randint(5, 20)
-    amount = _amount_sample(df, rng)
-    for i, node in enumerate(members):
-        nxt = members[(i + 1) % len(members)]
-        leg_amount = amount if difficulty == "obvious" else amount * rng.uniform(0.85, 0.98) ** i
-        g.add_edge(
-            node,
-            nxt,
-            amount=leg_amount,
-            step=base_step + i * step_gap,
-            type="TRANSFER",
-            planted=True,
-            ring_id=ring_id,
-        )
-
-    return Ring(ring_id, "circular_flow", difficulty, members)
-
-
-def plant_legit_cluster(
-    g: nx.MultiDiGraph,
-    df: pd.DataFrame,
-    rng: random.Random,
-    ring_id: str,
-    size: int,
-) -> Ring:
-    """Mimic payout fan-in with independent payments to a popular merchant."""
-    members = rng.sample(_customer_nodes(g), k=size)
-    merchant = rng.choice(_merchant_nodes(g))
-    for node in members:
-        g.add_edge(
-            node,
-            merchant,
-            amount=_amount_sample(df, rng),
-            step=rng.randint(1, 743),
-            type="PAYMENT",
-            planted=True,
-            ring_id=ring_id,
-        )
-    return Ring(ring_id, "legit_cluster", None, members + [merchant])
-
-
-_PLANTERS = {
-    "shared_device": plant_shared_device_ring,
-    "shared_payout": plant_shared_payout_ring,
-    "circular_flow": plant_circular_flow_ring,
-}
 
 
 def plant_rings(
-    df: pd.DataFrame,
-    config: PlantConfig | None = None,
+    df: pd.DataFrame, config: PlantConfig | None = None,
 ) -> tuple[nx.MultiDiGraph, list[Ring]]:
-    """Return the PaySim graph and planted rings with stratified train/test labels."""
+    """Return a seeded graph with disjoint, stratified calibration/test cohorts."""
     config = config or PlantConfig()
     rng = random.Random(config.random_seed)
-
+    balance_rng = random.Random(f"{config.random_seed}:balances")
     g = build_base_graph(df)
+    accounts = [n for n, data in g.nodes(data=True) if data["kind"] == "C"]
+    rng.shuffle(accounts)
     rings: list[Ring] = []
+    strata = [
+        (method, method, difficulty, config.rings_per_type_per_difficulty)
+        for method in METHODS
+        for difficulty in DIFFICULTIES
+    ] + [(kind, method, None, config.negatives_per_method) for kind, method in BENIGN_METHODS.items()]
 
-    counter = 0
-    for ring_type, planter in _PLANTERS.items():
-        for difficulty in DIFFICULTIES:
-            for _ in range(config.rings_per_type_per_difficulty):
-                counter += 1
-                ring_id = f"{ring_type}-{difficulty}-{counter:03d}"
-                size = rng.randint(config.min_ring_size, config.max_ring_size)
-                rings.append(planter(g, df, rng, ring_id, size, difficulty))
-
-    for _ in range(config.legit_clusters):
-        counter += 1
-        ring_id = f"legit_cluster-{counter:03d}"
-        size = rng.randint(config.min_ring_size, config.max_ring_size)
-        rings.append(plant_legit_cluster(g, df, rng, ring_id, size))
+    for kind, method, difficulty, count in strata:
+        for _ in range(count):
+            size = rng.randint(config.min_ring_size, config.max_ring_size)
+            # Give both payout classes the same recipient role, drawn from the same account pool.
+            n_members = size + (method == "shared_payout")
+            if len(accounts) < n_members:
+                raise ValueError("PaySim sample has too few distinct customer accounts for the benchmark.")
+            members = [accounts.pop() for _ in range(n_members)]
+            if method == "shared_device":
+                g.add_node(f"C-CONTEXT-{members[0]}", kind="C")
+            ring_id = f"{kind}-{difficulty or 'benign'}-{len(rings) + 1:03d}"
+            ring = Ring(ring_id, kind, difficulty, members)
+            _plant_pattern(g, df, rng, balance_rng, ring, method)
+            rings.append(ring)
 
     _assign_splits(rings, config.test_fraction, rng)
-
     return g, rings
 
 
 def _assign_splits(rings: list[Ring], test_fraction: float, rng: random.Random) -> None:
-    """Stratify by ring type and difficulty, keeping singletons in training."""
-    from collections import defaultdict
-
+    """Stratify by ring type and difficulty with at least one group in each split."""
     groups: dict[tuple[str, str | None], list[Ring]] = defaultdict(list)
     for ring in rings:
         groups[(ring.ring_type, ring.difficulty)].append(ring)
 
     for group in groups.values():
         rng.shuffle(group)
-        n_test = max(1, round(len(group) * test_fraction)) if len(group) > 1 else 0
+        n_test = min(len(group) - 1, max(1, round(len(group) * test_fraction)))
         for ring in group[:n_test]:
             ring.split = "test"
-        for ring in group[n_test:]:
-            ring.split = "train"
 
 
 def rings_to_frame(rings: list[Ring]) -> pd.DataFrame:
-    """Flatten planted rings into one row per (ring, member) for inspection/eval."""
-    records = [
+    """Flatten planted rings into one row per (ring, member)."""
+    return pd.DataFrame.from_records([
         {
             "ring_id": ring.ring_id,
             "ring_type": ring.ring_type,
@@ -247,23 +185,18 @@ def rings_to_frame(rings: list[Ring]) -> pd.DataFrame:
         }
         for ring in rings
         for member in ring.members
-    ]
-    return pd.DataFrame.from_records(records)
+    ])
 
 
 def summarize(g: nx.MultiDiGraph, rings: list[Ring]) -> None:
     print(f"graph: {g.number_of_nodes():,} nodes, {g.number_of_edges():,} edges")
     planted_edges = sum(1 for _, _, d in g.edges(data=True) if d.get("planted"))
     print(f"planted edges: {planted_edges:,}")
-
     frame = rings_to_frame(rings)
-    print(f"\nrings planted: {len(rings)}")
+    print(f"\ncohorts planted: {len(rings)}")
     print(frame.groupby(["ring_type", "difficulty", "split"], dropna=False).agg(
         n_rings=("ring_id", "nunique"), n_members=("node", "count")
     ))
-
-    device_tagged = sum(1 for _, d in g.nodes(data=True) if "device_id" in d)
-    print(f"\naccounts tagged with a planted device_id: {device_tagged}")
 
 
 if __name__ == "__main__":
