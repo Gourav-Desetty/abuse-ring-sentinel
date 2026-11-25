@@ -13,6 +13,7 @@ wheels/
 
 # Internal working docs, excluded from the public repo
 PLAN.md
+test_neo4j.py
 
 #dataset
 /archive
