@@ -18,11 +18,15 @@ def main(argv: list[str] | None = None) -> None:
         "--sample-frac",
         type=float,
         default=DEFAULT_SAMPLE_FRAC,
-        help=f"fraction of PaySim rows to load (default {DEFAULT_SAMPLE_FRAC}, matching the documented results)",
+        help=f"fraction of PaySim rows to load (default {DEFAULT_SAMPLE_FRAC})",
     )
     parser.add_argument("--no-wipe", action="store_true", help="don't clear the existing graph before loading")
     parser.add_argument("--skip-build", action="store_true", help="skip the build-graph step (reuse an already-loaded graph)")
+    parser.add_argument("--runs", type=int, default=metrics.MAIN_EVAL_RUNS, help="agent runs per held-out candidate")
+    parser.add_argument("--stability-runs", type=int, default=metrics.STABILITY_RUNS, help="extra runs per borderline candidate")
     args = parser.parse_args(argv)
+    if args.runs < 1 or args.stability_runs < 0:
+        parser.error("--runs must be positive and --stability-runs must be nonnegative")
 
     if args.skip_build:
         print("=== 1/4: build graph -- skipped (--skip-build) ===")
@@ -37,7 +41,7 @@ def main(argv: list[str] | None = None) -> None:
     detection.main(["--check-ground-truth"])
 
     print("\n=== 3/4: score the agent against held-out ground truth ===")
-    metrics.main()
+    metrics.main(["--runs", str(args.runs), "--stability-runs", str(args.stability_runs)])
 
     print("\n=== 4/4: render the report ===")
     report.main()
