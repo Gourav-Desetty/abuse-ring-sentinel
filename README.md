@@ -15,7 +15,17 @@ The pipeline loads PaySim, plants labeled rings, detects candidates, and writes 
 
 ## Evaluation
 
-The saved run scored **100% precision and 50% recall** on **seven candidates**. It flagged three of six planted positives and correctly withheld a flag from the only negative. Each verdict came from five independent agent runs. The single negative helped inform the payout flag threshold, so the precision figure is descriptive and needs independent validation. [Evaluation notes](docs/EVALUATION.md) · [Full report](src/eval/report.md)
+The seeded benchmark holds out **30 positive rings and 15 hard negatives** across
+shared devices, personal transfers to a common recipient, and circular flows. The
+report includes candidate precision, ring detection and verdict recall, hard-negative
+coverage, and worked examples with model diagnoses and verdicts.
+[Evaluation protocol](docs/EVALUATION.md) · [Full report](src/eval/report.md)
+
+The saved single-pass Groq run scored 44 candidates with **70.7% candidate
+precision** and **96.7% ring verdict recall**. It flagged 12 of the 15 hard
+negatives, including every benign shared-device and circular-flow example.
+
+[Reproduce the demo and explore the graph in Neo4j Browser](docs/DEMO.md).
 
 ## Tests
 
