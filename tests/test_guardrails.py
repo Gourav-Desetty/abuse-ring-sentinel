@@ -67,3 +67,14 @@ class GuardrailTests(unittest.TestCase):
         self.assertTrue(failed["run_failed"])
         self.assertEqual(failed["failure_stage"], "verify")
         self.assertEqual(failed["final_verdict"], RUN_FAILED_VERDICT)
+
+    def test_circular_flow_prompts_use_decay_and_omit_balance_diagnostic(self):
+        candidate = {
+            "candidate_id": "cycle", "method": "circular_flow", "members": ["A", "B", "C"],
+            "suspicion_score": 0.8, "evidence": {"decay_consistency": 1.0, "sender_balance_mismatch_count": 0},
+        }
+        run_agent(build_graph(self.llm, self.guardrails), candidate, thread_id="cycle-evidence")
+        for model in (self.llm, self.verifier):
+            prompt = model.invoke.call_args.args[0]
+            self.assertIn('"decay_consistency": 1.0', prompt)
+            self.assertNotIn("sender_balance_mismatch_count", prompt)
