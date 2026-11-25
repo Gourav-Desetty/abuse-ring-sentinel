@@ -1,14 +1,4 @@
-"""Render metrics.py's EvalResult into a human-readable markdown report --
-overall precision/recall/false-positive cost, the ring_type/difficulty
-breakdown, the verdict-stability side-experiment, and one worked example
-each of a correctly-flagged true positive and a correctly-declined false
-positive. This is the report the pitch draws from -- the false positive's
-full evidence trail is kept visible, not just its number, since that worked
-example is the strongest slide.
-
-Run: uv run python -m src.eval.report   (loads metrics.py's saved results;
-run metrics.py first if eval_results.json doesn't exist yet)
-"""
+"""Render held-out metrics and worked agent examples from saved evaluation results."""
 
 from __future__ import annotations
 
@@ -29,10 +19,7 @@ def _fmt_flip(x: float | None) -> str:
 
 
 def _fmt_runs(n_succeeded: int, n_failed: int, n_runs: int) -> str:
-    """"5/5" when every run completed; a flagged "2/5 !!" when some didn't --
-    so a reader can never mistake repeated infrastructure failures for a
-    stable, unanimous verdict.
-    """
+    """Format completed versus attempted runs and highlight any failures."""
     if n_failed == 0:
         return f"{n_succeeded}/{n_runs}"
     return f"**{n_succeeded}/{n_runs}** :warning: {n_failed} failed"
@@ -51,9 +38,12 @@ def _find_positive_example(records: list[CandidateRecord]) -> CandidateRecord | 
 
 
 def _find_negative_example(records: list[CandidateRecord]) -> CandidateRecord | None:
-    unplanted = [r for r in records if r.ground_truth == "negative" and r.ring_id is None]
-    preferred = [r for r in unplanted if r.evidence.get("payout_account") == "C680344850"]
-    return (preferred or unplanted or [None])[0]
+    negatives = [
+        r for r in records
+        if r.ground_truth == "negative" and r.predicted_verdict != NO_VERDICT
+    ]
+    with_diagnosis = [r for r in negatives if r.diagnosis]
+    return (with_diagnosis or negatives or [None])[0]
 
 
 def _worked_example(title: str, record: CandidateRecord | None) -> str:
@@ -68,15 +58,15 @@ def _worked_example(title: str, record: CandidateRecord | None) -> str:
         f"- **members**: {record.members}",
         f"- **evidence**: `{record.evidence}`",
         f"- **ground truth**: {record.ground_truth}"
-        + (f" ({record.ring_type}/{record.difficulty}, ring_id={record.ring_id}, split={record.split})" if record.ring_id else " (no planted ring -- real, unplanted PaySim data)"),
+        + (f" ({record.ring_type}/{record.difficulty}, ring_id={record.ring_id}, split={record.split})" if record.ring_id else " (unplanted PaySim candidate)"),
         "",
         "**Diagnosis:**",
         "",
-        "> " + (record.diagnosis or "_none_").replace("\n", "\n> "),
+        "\n".join(f"> {line.rstrip()}".rstrip() for line in (record.diagnosis or "_none_").splitlines()),
         "",
         f"**Output guardrail:** is_grounded=`{record.is_grounded}`, hallucinated_claims=`{record.hallucinated_claims}`",
         "",
-        f"**Final verdict:** `{record.predicted_verdict}`  \n**Reason:** {record.reason}",
+        f"**Final verdict:** `{record.predicted_verdict}`\n\n**Reason:** {record.reason}",
         "",
     ]
     if record.n_failed:
@@ -93,10 +83,16 @@ def generate_report(result: EvalResult) -> str:
     parts: list[str] = []
 
     parts.append("# Abuse Ring Sentinel -- Evaluation Report\n")
-    parts.append(
-        "Scoring includes test-split ring matches and candidates without ring tags. "
-        "Candidates matching a train-split ring are excluded.\n"
-    )
+    if result.rings is None:
+        parts.append(
+            "> Historical evaluation. The original seven-candidate test also included a payout "
+            "case used to set the flag threshold. [Current protocol](../../docs/EVALUATION.md)\n"
+        )
+    else:
+        parts.append(
+            "Candidate metrics use one representative per matched held-out cohort. "
+            "Unmatched detections have unknown truth. Ring recall includes all held-out positive rings.\n"
+        )
     parts.append(
         f"- Candidates from detection.py: **{result.n_candidates_total}**\n"
         f"- Excluded (matched a train-split ring): **{result.n_excluded_train}**\n"
@@ -114,11 +110,19 @@ def generate_report(result: EvalResult) -> str:
             "declined flag. Check the `runs ok` column before reading any row as a stable result, and re-run the "
             "eval once quota allows for a clean measurement.\n"
         )
-    parts.append(
-        "> **Evaluation caveat.** The unplanted PaySim candidate `C680344850` helped inform the "
-        "shared-payout `FLAG_SCORE_FLOOR` and is included in the scored set. Treat the metrics "
-        "as descriptive results from a small sample. [Evaluation notes](../../docs/EVALUATION.md)\n"
-    )
+    if result.rings is not None:
+        parts.append(
+            f"- Unmatched detections excluded from candidate scoring: **{result.n_unmatched}**\n"
+            f"- Duplicate held-out detections collapsed: **{result.n_duplicate_test}**"
+        )
+    for method, fit in sorted(result.flag_calibration.items()):
+        floor = fit.floor if fit.floor is not None else "disabled (missing a calibration class)"
+        parts.append(
+            f"- `{method}` flag floor: **{floor}** "
+            f"({fit.n_positives} positive / {fit.n_negatives} negative calibration cohorts)"
+        )
+    if result.rings is not None or result.flag_calibration:
+        parts.append("")
 
     parts.append("## Overall metrics\n")
     if result.n_unscored_failed:
@@ -129,8 +133,8 @@ def generate_report(result: EvalResult) -> str:
         )
     parts.append("| Metric | Value |")
     parts.append("|---|---|")
-    parts.append(f"| Precision | {_fmt(m.precision)} |")
-    parts.append(f"| Recall | {_fmt(m.recall)} |")
+    parts.append(f"| Candidate precision | {_fmt(m.precision)} |")
+    parts.append(f"| Candidate recall | {_fmt(m.recall)} |")
     parts.append(f"| False-positive cost (count of negatives incorrectly flagged) | {m.fp_cost} |")
     parts.append(f"| True positives | {m.tp} |")
     parts.append(f"| False positives | {m.fp} |")
@@ -138,19 +142,24 @@ def generate_report(result: EvalResult) -> str:
     parts.append(f"| True negatives | {m.tn} |")
     parts.append("")
 
-    n_runs_note = result.records[0].n_runs if result.records else "N"
-    parts.append("## Per-candidate verdicts (majority vote)\n")
+    if result.rings is not None:
+        rings = result.rings
+        parts.append("## Held-out cohort coverage\n")
+        parts.append(f"- Ring detection recall: **{rings.detected}/{rings.total} ({_fmt(rings.detection_recall)})**")
+        parts.append(f"- Ring verdict recall: **{rings.flagged}/{rings.total} ({_fmt(rings.verdict_recall)})**\n")
+        parts.append("| Hard-negative cohort | Planted | Matched | Scored | Flagged |")
+        parts.append("|---|---|---|---|---|")
+        for kind, total in sorted(result.held_out_negatives.items()):
+            matches = [r for r in result.records if r.ring_type == kind]
+            scored = sum(r.predicted_verdict != NO_VERDICT for r in matches)
+            flagged = sum(r.predicted_verdict == "ring_flagged" for r in matches)
+            parts.append(f"| {kind} | {total} | {len(matches)} | {scored} | {flagged} |")
+        parts.append("")
+
+    parts.append("## Per-candidate verdicts\n")
     parts.append(
-        f"LLM sampling noise affects true-positive candidates too, not just deliberately borderline "
-        f"ones -- two identical eval runs against the same graph produced different recall. So every "
-        f"row above is a *majority vote*: each eligible candidate ran through the full agent "
-        f"{n_runs_note} times independently, and its scored verdict is the modal (most common) one "
-        f"across those runs. `flip rate` is the fraction of runs that disagreed with the modal "
-        f"verdict for that candidate -- 0% means every run agreed.\n"
-        f"\n`runs ok` is how many of the {n_runs_note} attempted runs actually completed. A run whose LLM call "
-        f"exhausted its retries produced no judgment at all, shows as `run_failed`, and is dropped from both the "
-        f"modal verdict and the flip rate -- so a row reading 0% flip on 2 successful runs is far weaker evidence "
-        f"of stability than one reading 0% on {n_runs_note}.\n"
+        "The scored verdict is the mode across completed runs. Flip rate measures disagreement "
+        "with that mode. Read it alongside the number of completed runs.\n"
     )
     parts.append("| candidate_id | ground_truth | score | runs ok | verdicts (one per run) | modal verdict (scored) | flip rate |")
     parts.append("|---|---|---|---|---|---|---|")
@@ -171,13 +180,6 @@ def generate_report(result: EvalResult) -> str:
     parts.append("")
 
     parts.append("## Verdict stability (side-experiment)\n")
-    parts.append(
-        "A deeper look at the same phenomenon the majority vote above corrects for, but on the "
-        "specific candidates closest to a real decision boundary (shared_payout's score floor) and "
-        f"with more repeats ({result.stability[0].n_runs if result.stability else 'N'} vs. "
-        f"{n_runs_note} above), to see how noisy the noisiest candidates actually are. Distinct from "
-        "-- not folded into -- the per-candidate table above.\n"
-    )
     if result.stability:
         parts.append("| candidate_id | ground_truth | score | runs ok | verdicts (one per run) | modal verdict | flip rate |")
         parts.append("|---|---|---|---|---|---|---|")
@@ -188,12 +190,15 @@ def generate_report(result: EvalResult) -> str:
                 f"{_fmt_verdict(s.modal_verdict, s.n_runs)} | {_fmt_flip(s.flip_rate)} |"
             )
     else:
-        parts.append("_No shared_payout candidates were eligible to sample borderline cases from._")
+        parts.append("_No additional stability runs were recorded._")
     parts.append("")
 
     parts.append("## Worked examples\n")
-    parts.append(_worked_example("True positive, correctly flagged", _find_positive_example(result.records)))
-    parts.append(_worked_example("False positive, correctly declined", _find_negative_example(result.records)))
+    positive = _find_positive_example(result.records)
+    if positive is None:
+        positive = next((r for r in result.records if r.ground_truth == "positive" and r.diagnosis), None)
+    parts.append(_worked_example("Held-out positive", positive))
+    parts.append(_worked_example("Held-out negative", _find_negative_example(result.records)))
 
     return "\n".join(parts)
 
