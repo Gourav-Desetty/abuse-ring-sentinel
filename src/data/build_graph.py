@@ -1,11 +1,4 @@
-"""Push the base transaction graph + planted collusion rings into Neo4j.
-
-Consumes load_paysim.py + plant_rings.py's output (the built graph and the
-list of planted Rings) and writes it via UNWIND-batched, idempotent
-(MERGE-on-account_id / MERGE-on-defining-properties) writes -- see
-ARCHITECTURE.md § Phase 1 for the full node/relationship schema and env var
-setup.
-"""
+"""Load PaySim transactions and planted rings into Neo4j with batched merges."""
 
 from __future__ import annotations
 
@@ -60,10 +53,7 @@ def _chunks(rows: list[dict], size: int) -> Iterator[list[dict]]:
 
 
 def create_constraints(driver: Driver, config: Neo4jConfig) -> None:
-    """Create the Account.account_id uniqueness constraint (and its backing
-    index) up front -- required for MERGE to stay fast at 6M+ nodes, and
-    for node idempotency across re-runs.
-    """
+    """Enforce unique account IDs in Neo4j for indexed, repeatable account merges."""
     with driver.session(database=config.database) as session:
         session.run(
             "CREATE CONSTRAINT account_id_unique IF NOT EXISTS "
@@ -133,11 +123,7 @@ def _edge_rows(g: nx.MultiDiGraph, ring_lookup: dict[str, Ring]) -> list[dict]:
 
 
 def _shared_payout_rows(g: nx.MultiDiGraph, rings: list[Ring]) -> list[dict]:
-    """Derive SHARES_PAYOUT pairs for each shared_payout ring from its
-    planted TRANSACTED_WITH legs, rather than from `Ring.members` directly,
-    so the payout target is identified structurally (whoever fed it) instead
-    of by naming convention.
-    """
+    """Derive pairs of payers from the planted transfers in each shared-payout ring."""
     payers_by_ring: dict[str, set[str]] = {}
     for sender, _, data in g.edges(data=True):
         if ring_id := data.get("ring_id"):
@@ -230,23 +216,14 @@ def build_graph(
 
 
 def _scalar(session: Session, query: LiteralString) -> int:
-    """Run a `RETURN ... AS n` query and return that single count.
-
-    `.single(strict=True)` raises rather than returning None if the query
-    didn't yield exactly one record, so a plain `[...]` index here is safe
-    -- unlike `.single()`, which types as `Record | None`.
-    """
+    """Return the count named n from a query that must yield exactly one record."""
     record = session.run(query).single(strict=True)
     assert record is not None  # strict=True raises rather than returning None
     return record["n"]
 
 
 def verify_load(driver: Driver, config: Neo4jConfig, g: nx.MultiDiGraph, rings: list[Ring]) -> None:
-    """Print sanity counts from Neo4j and cross-check them against the
-    in-memory graph/rings that were just loaded -- the same numbers
-    plant_rings.py's own summarize() prints, so a mismatch here means the
-    load (not the planting) introduced a bug.
-    """
+    """Compare Neo4j counts with the in-memory graph and report the planted cohort breakdown."""
     expected_nodes = g.number_of_nodes()
     expected_edges = g.number_of_edges()
     expected_device_tagged = sum(1 for _, d in g.nodes(data=True) if "device_id" in d)

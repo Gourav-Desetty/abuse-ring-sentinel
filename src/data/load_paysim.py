@@ -1,16 +1,4 @@
-"""Load and clean the PaySim synthetic transaction dataset.
-
-``archive/paysim.csv`` columns: step, type, amount, nameOrig, oldbalanceOrg,
-newbalanceOrig, nameDest, oldbalanceDest, newbalanceDest, isFraud,
-isFlaggedFraud.
-
-IMPORTANT: ``isFraud`` and ``isFlaggedFraud`` are NOT ring-membership ground
-truth. ``isFraud`` flags individual fraudulent transactions (unrelated to
-ring membership); ``isFlaggedFraud`` is a near-constant Kaggle artifact (16
-positives out of 6.36M rows). Ring ground truth is manufactured separately in
-``plant_rings.py``. Both columns are kept in the loaded frame for reference
-only -- do not use either as a label downstream.
-"""
+"""Load PaySim transactions and retain their transaction-level fraud labels for reference."""
 
 from __future__ import annotations
 
@@ -41,18 +29,7 @@ def load_paysim(
     sample_frac: float | None = None,
     random_state: int = 42,
 ) -> pd.DataFrame:
-    """Load, validate, and lightly clean the PaySim CSV.
-
-    Parameters
-    ----------
-    path: CSV location. Defaults to ``archive/paysim.csv`` at the repo root.
-    nrows: read only the first N rows (fast dev iteration, cheap since PaySim
-        is already ordered by ``step``).
-    sample_frac: instead (or in addition to) ``nrows``, take a random sample
-        of the loaded rows. Useful because the full file is 6.36M rows --
-        too large for a snappy dev loop when building the graph downstream.
-    random_state: seed for ``sample_frac``.
-    """
+    """Load and validate PaySim rows, optionally limiting the input or taking a reproducible random sample."""
     path = Path(path)
     df = pd.read_csv(path, nrows=nrows)
 
