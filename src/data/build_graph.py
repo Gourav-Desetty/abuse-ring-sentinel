@@ -20,8 +20,11 @@ from dotenv import load_dotenv
 from neo4j import Driver, GraphDatabase, Session
 
 from src.data.load_paysim import load_paysim
-from src.data.plant_rings import Ring, plant_rings
+from src.data.plant_rings import BENIGN_METHODS, Ring, plant_rings
 
+import truststore
+
+truststore.inject_into_ssl()
 DEFAULT_BATCH_SIZE = 5_000
 
 
@@ -69,18 +72,20 @@ def create_constraints(driver: Driver, config: Neo4jConfig) -> None:
 
 
 def _ring_tag_map(rings: list[Ring]) -> dict[str, dict]:
-    """node_id -> {ring_id, ring_type, difficulty, split} for every planted
-    ring member. A node planted into more than one ring keeps whichever
-    ring's tag is written last -- a rare collision, acceptable here.
-    """
+    """Map each account to its single benchmark cohort."""
     tags: dict[str, dict] = {}
     for ring in rings:
+        method = BENIGN_METHODS.get(ring.ring_type, ring.ring_type)
+        payout_account = ring.members[-1] if method == "shared_payout" else None
         for member in ring.members:
+            if member in tags:
+                raise ValueError(f"Account {member} belongs to multiple benchmark cohorts")
             tags[member] = {
                 "ring_id": ring.ring_id,
                 "ring_type": ring.ring_type,
                 "difficulty": ring.difficulty,
                 "split": ring.split,
+                "payout_account": payout_account,
             }
     return tags
 
@@ -98,6 +103,7 @@ def _node_rows(g: nx.MultiDiGraph, ring_tags: dict[str, dict]) -> list[dict]:
                 "ring_type": tag.get("ring_type"),
                 "difficulty": tag.get("difficulty"),
                 "split": tag.get("split"),
+                "payout_account": tag.get("payout_account"),
             }
         )
     return rows
@@ -115,6 +121,8 @@ def _edge_rows(g: nx.MultiDiGraph, ring_lookup: dict[str, Ring]) -> list[dict]:
                 "amount": data.get("amount"),
                 "step": data.get("step"),
                 "type": data.get("type"),
+                "oldbalanceOrg": data.get("oldbalanceOrg"),
+                "newbalanceOrig": data.get("newbalanceOrig"),
                 "ring_id": ring_id,
                 "ring_type": ring.ring_type if ring else None,
                 "difficulty": ring.difficulty if ring else None,
@@ -130,11 +138,15 @@ def _shared_payout_rows(g: nx.MultiDiGraph, rings: list[Ring]) -> list[dict]:
     so the payout target is identified structurally (whoever fed it) instead
     of by naming convention.
     """
+    payers_by_ring: dict[str, set[str]] = {}
+    for sender, _, data in g.edges(data=True):
+        if ring_id := data.get("ring_id"):
+            payers_by_ring.setdefault(ring_id, set()).add(sender)
     rows = []
     for ring in rings:
         if ring.ring_type != "shared_payout":
             continue
-        payers = sorted({u for u, _, data in g.edges(data=True) if data.get("ring_id") == ring.ring_id})
+        payers = sorted(payers_by_ring.get(ring.ring_id, ()))
         for a, b in itertools.combinations(payers, 2):
             rows.append(
                 {
@@ -157,7 +169,8 @@ SET a.kind = row.kind,
     a.ring_id = row.ring_id,
     a.ring_type = row.ring_type,
     a.difficulty = row.difficulty,
-    a.split = row.split
+    a.split = row.split,
+    a.payout_account = row.payout_account
 """
 
 _TRANSACTED_WITH_QUERY: LiteralString = """
@@ -165,7 +178,9 @@ UNWIND $rows AS row
 MATCH (a:Account {account_id: row.from_id})
 MATCH (b:Account {account_id: row.to_id})
 MERGE (a)-[r:TRANSACTED_WITH {amount: row.amount, step: row.step, type: row.type}]->(b)
-SET r.ring_id = row.ring_id,
+SET r.oldbalanceOrg = row.oldbalanceOrg,
+    r.newbalanceOrig = row.newbalanceOrig,
+    r.ring_id = row.ring_id,
     r.ring_type = row.ring_type,
     r.difficulty = row.difficulty,
     r.split = row.split
